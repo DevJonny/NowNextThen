@@ -27,3 +27,60 @@ Started: 2026-02-18
 - **Learnings for future iterations:**
   - As of 2026, valid stable GitHub Actions versions: actions/checkout@v4, actions/setup-dotnet@v4
 ---
+
+## 2026-02-18 - US-060
+- US-060 was already committed in the git log (386bffb) - prd.json was not updated to passes: true
+- Files changed: (already done) src/NowThenNext/Pages/ScheduleDisplay.razor
+- Updated prd.json to set passes: true
+- **Learnings for future iterations:**
+  - Both toggle states in ScheduleDisplay already show "Auto" label with appropriate pause/play icons
+---
+
+## 2026-02-18 - US-061
+- Replaced dollar-coin SVG in FoodLibrary.razor and FoodChoices.razor empty states with the apple/food icon used on the Home page
+- The food icon uses 3 paths: M12 2c1 0 2 1 2 2s-1 2-2 2, M12 6c-4 0-7 3-7 8s3 8 7 8 7-3 7-8-3-8-7-8z, M12 6v3
+- Files changed: src/NowThenNext/Pages/FoodLibrary.razor, src/NowThenNext/Pages/FoodChoices.razor
+- **Learnings for future iterations:**
+  - The food icon from Home.razor is the canonical icon to use for food-related empty states
+---
+
+## 2026-02-18 - US-062
+- Fixed Upload.razor success/error message colours to match app calm palette
+- success: background rgba(107,154,125,0.15), border/text #6B9A7D (removed #2E7D32 text and #E8F5E9 bg)
+- error: background rgba(212,160,106,0.15), border/text #D4A06A (removed #E65100 text and #FFF3E0 bg)
+- Files changed: src/NowThenNext/Pages/Upload.razor
+- **Learnings for future iterations:**
+  - Settings.razor is the canonical reference for success/error message styling in this app
+---
+
+## 2026-02-18 - US-063
+- Fixed "places and activities" text in PlacesLibrary.razor and MyPictures.razor empty states
+- Changed to "Add pictures of places to use in your daily schedule."
+- Files changed: src/NowThenNext/Pages/PlacesLibrary.razor, src/NowThenNext/Pages/MyPictures.razor
+---
+
+## 2026-02-18 - US-064
+- Changed px-6 sm:px-8 to px-4 sm:px-6 in LearningCategories.razor and LearningCardGrid.razor (both header and content divs)
+- Files changed: src/NowThenNext/Pages/LearningCategories.razor, src/NowThenNext/Pages/LearningCardGrid.razor
+---
+
+## 2026-02-18 - US-065
+- Removed Bootstrap CSS link from wwwroot/index.html
+- Replaced --bs-secondary-color CSS variable reference in app.css with hardcoded #6c757d
+- Files changed: src/NowThenNext/wwwroot/index.html, src/NowThenNext/wwwroot/css/app.css
+- **Learnings for future iterations:**
+  - The only Bootstrap CSS variable usage was --bs-secondary-color in form-floating placeholder styles
+---
+
+## 2026-02-18 - US-066
+- Deleted MyPictures.razor and MyPictures.razor.cs (orphaned page missing Activities category)
+- Removed @page "/my-pictures/places", "/my-pictures/food", "/my-pictures/activities" route aliases from respective library pages
+- MyPictures.razor only had @page "/my-pictures" and @page "/my-pictures/{Tab}" directives
+- Updated LibraryTests.cs: replaced all /my-pictures/* routes with /places and /food
+- Rewrote TabNavigation_SwitchesBetweenLibraries test as LibraryNavigation_PlacesAndFoodPagesLoad
+- Updated UploadTests.cs: replaced /my-pictures/places with /places
+- Files changed: src/NowThenNext/Pages/PlacesLibrary.razor, FoodLibrary.razor, ActivitiesLibrary.razor, tests/LibraryTests.cs, tests/UploadTests.cs
+- **Learnings for future iterations:**
+  - ActivitiesLibrary.razor also had a /my-pictures/activities alias (not mentioned in PRD but removed for consistency)
+  - When deleting a page, always grep tests/ for references to that page's routes
+---
