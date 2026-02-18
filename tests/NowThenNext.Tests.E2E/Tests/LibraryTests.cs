@@ -5,8 +5,8 @@ using NowThenNext.Tests.E2E.Helpers;
 namespace NowThenNext.Tests.E2E.Tests;
 
 /// <summary>
-/// E2E tests for library views (My Pictures) and image management functionality.
-/// Tests displaying images, tab navigation, delete, and favorite operations.
+/// E2E tests for library views (Places, Food, Activities) and image management functionality.
+/// Tests displaying images, navigation, delete, and favorite operations.
 /// </summary>
 [Collection("BlazorApp")]
 public class LibraryTests
@@ -30,8 +30,8 @@ public class LibraryTests
             var uniqueLabel = $"TestPlace_{Guid.NewGuid().ToString()[..8]}";
             await UploadTestImageAsync(page, uniqueLabel, "Places", clearStorageFirst: true);
 
-            // Act - Navigate to My Pictures / Places
-            await page.GotoAsync($"{_fixture.BaseUrl}/my-pictures/places");
+            // Act - Navigate to Places library
+            await page.GotoAsync($"{_fixture.BaseUrl}/places");
             await page.WaitForSelectorAsync(".image-grid, .empty-state", new PageWaitForSelectorOptions { Timeout = 60000 });
 
             // Assert - The uploaded image should be displayed with its label
@@ -56,8 +56,8 @@ public class LibraryTests
             var uniqueLabel = $"TestFood_{Guid.NewGuid().ToString()[..8]}";
             await UploadTestImageAsync(page, uniqueLabel, "Food", clearStorageFirst: true);
 
-            // Act - Navigate to My Pictures / Food
-            await page.GotoAsync($"{_fixture.BaseUrl}/my-pictures/food");
+            // Act - Navigate to Food library
+            await page.GotoAsync($"{_fixture.BaseUrl}/food");
             await page.WaitForSelectorAsync(".image-grid, .empty-state", new PageWaitForSelectorOptions { Timeout = 60000 });
 
             // Assert - The uploaded image should be displayed with its label
@@ -71,44 +71,31 @@ public class LibraryTests
     }
 
     [Fact]
-    public async Task TabNavigation_SwitchesBetweenLibraries()
+    public async Task LibraryNavigation_PlacesAndFoodPagesLoad()
     {
         // Arrange
         var page = await _fixture.CreatePageAsync();
 
         try
         {
-            // Navigate to My Pictures (main route)
-            await page.GotoAsync($"{_fixture.BaseUrl}/my-pictures");
-
-            // Wait for Blazor WASM to initialize - use h1 selector which always exists
+            // Navigate to Places library
+            await page.GotoAsync($"{_fixture.BaseUrl}/places");
             await page.WaitForSelectorAsync("h1", new PageWaitForSelectorOptions { Timeout = 60000 });
             await page.ClearLocalStorageAsync();
 
-            // Verify we're on the My Pictures page by checking the heading
-            var heading = page.Locator("h1");
-            await Assertions.Expect(heading).ToContainTextAsync("My Pictures");
+            // Verify we're on the Places page
+            var placesHeading = page.Locator("h1");
+            await Assertions.Expect(placesHeading).ToContainTextAsync("Places");
+            Assert.EndsWith("/places", page.Url);
 
-            // Verify both tabs exist by looking for the tab button text
-            var placesTabText = page.Locator("text=Places").First;
-            var foodTabText = page.Locator("text=Food").First;
-
-            await Assertions.Expect(placesTabText).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 5000 });
-            await Assertions.Expect(foodTabText).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 5000 });
-
-            // Test navigation by clicking through to the food library via direct URL
-            await page.GotoAsync($"{_fixture.BaseUrl}/my-pictures/food");
+            // Navigate to Food library
+            await page.GotoAsync($"{_fixture.BaseUrl}/food");
             await page.WaitForSelectorAsync("h1", new PageWaitForSelectorOptions { Timeout = 60000 });
 
-            // Verify we're on the food tab
-            Assert.EndsWith("/my-pictures/food", page.Url);
-
-            // Navigate to places
-            await page.GotoAsync($"{_fixture.BaseUrl}/my-pictures/places");
-            await page.WaitForSelectorAsync("h1", new PageWaitForSelectorOptions { Timeout = 60000 });
-
-            // Verify we're on the places tab
-            Assert.EndsWith("/my-pictures/places", page.Url);
+            // Verify we're on the Food page
+            var foodHeading = page.Locator("h1");
+            await Assertions.Expect(foodHeading).ToContainTextAsync("Food");
+            Assert.EndsWith("/food", page.Url);
         }
         finally
         {
@@ -125,7 +112,7 @@ public class LibraryTests
         try
         {
             // Clear localStorage to ensure no images
-            await page.GotoAsync($"{_fixture.BaseUrl}/my-pictures/places");
+            await page.GotoAsync($"{_fixture.BaseUrl}/places");
             await page.WaitForSelectorAsync("h1", new PageWaitForSelectorOptions { Timeout = 60000 });
             await page.ClearLocalStorageAsync();
 
@@ -159,8 +146,8 @@ public class LibraryTests
             var uniqueLabel = $"DeleteTest_{Guid.NewGuid().ToString()[..8]}";
             await UploadTestImageAsync(page, uniqueLabel, "Places", clearStorageFirst: true);
 
-            // Navigate to My Pictures
-            await page.GotoAsync($"{_fixture.BaseUrl}/my-pictures/places");
+            // Navigate to Places library
+            await page.GotoAsync($"{_fixture.BaseUrl}/places");
             await page.WaitForSelectorAsync(".image-grid", new PageWaitForSelectorOptions { Timeout = 60000 });
 
             // Find and hover over the image tile to reveal delete button
@@ -197,8 +184,8 @@ public class LibraryTests
             var uniqueLabel = $"ToDelete_{Guid.NewGuid().ToString()[..8]}";
             await UploadTestImageAsync(page, uniqueLabel, "Places", clearStorageFirst: true);
 
-            // Navigate to My Pictures
-            await page.GotoAsync($"{_fixture.BaseUrl}/my-pictures/places");
+            // Navigate to Places library
+            await page.GotoAsync($"{_fixture.BaseUrl}/places");
             await page.WaitForSelectorAsync(".image-grid", new PageWaitForSelectorOptions { Timeout = 60000 });
 
             // Verify the image is there
@@ -239,8 +226,8 @@ public class LibraryTests
             var uniqueLabel = $"FavTest_{Guid.NewGuid().ToString()[..8]}";
             await UploadTestImageAsync(page, uniqueLabel, "Places", clearStorageFirst: true);
 
-            // Navigate to My Pictures
-            await page.GotoAsync($"{_fixture.BaseUrl}/my-pictures/places");
+            // Navigate to Places library
+            await page.GotoAsync($"{_fixture.BaseUrl}/places");
             await page.WaitForSelectorAsync(".image-grid", new PageWaitForSelectorOptions { Timeout = 60000 });
 
             // Find the favorite button (should not have 'favorited' class initially)
@@ -279,8 +266,8 @@ public class LibraryTests
             var uniqueLabel = $"FavoritesViewTest_{Guid.NewGuid().ToString()[..8]}";
             await UploadTestImageAsync(page, uniqueLabel, "Places", clearStorageFirst: true);
 
-            // Navigate to My Pictures and favorite the image
-            await page.GotoAsync($"{_fixture.BaseUrl}/my-pictures/places");
+            // Navigate to Places library and favorite the image
+            await page.GotoAsync($"{_fixture.BaseUrl}/places");
             await page.WaitForSelectorAsync(".image-grid", new PageWaitForSelectorOptions { Timeout = 60000 });
 
             // Click the favorite button

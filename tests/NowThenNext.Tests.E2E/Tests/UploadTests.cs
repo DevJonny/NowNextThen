@@ -247,8 +247,8 @@ public class UploadTests
             // Wait for success message
             await page.WaitForSelectorAsync(".success-message", new PageWaitForSelectorOptions { Timeout = 15000 });
 
-            // Act - Navigate to My Pictures / Places library
-            await page.GotoAsync($"{_fixture.BaseUrl}/my-pictures/places");
+            // Act - Navigate to Places library
+            await page.GotoAsync($"{_fixture.BaseUrl}/places");
             await page.WaitForSelectorAsync(".image-grid, .empty-state", new PageWaitForSelectorOptions { Timeout = 60000 });
 
             // Assert - The uploaded image should appear with its label
