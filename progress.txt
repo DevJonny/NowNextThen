@@ -1,85 +1,29 @@
-# Ralph Progress Log - Storage Breakdown
+# Ralph Progress Log - QoL Fixes
 
-Branch: ralph/storage-breakdown
-Started: 2026-02-16
+Branch: ralph/qol-fixes
+Started: 2026-02-18
 
-## Codebase Patterns
-- Settings page: src/NowThenNext/Pages/Settings.razor (template + inline <style>) + Settings.razor.cs (code-behind)
-- Storage service: LocalStorageImageService.cs implements IImageStorageService, uses IndexedDB via JS interop
-- IndexedDB stores: 'images', 'phonics-progress', 'learning-cards' (all use key 'data')
-- Existing GetStorageInfoAsync() returns StorageInfo record with UsagePercentage, EstimatedRemainingImages, CurrentUsageBytes, EstimatedQuotaBytes
-- GetStorageBreakdownAsync() returns List<StorageItemInfo> sorted by SizeBytes descending
-- JS interop: indexedDb.getItem(storeName) returns raw JSON string or null
-- Calm colour palette: primary #5B9A9A, accent #7BA893, amber #D4A06A, bg #F9F7F3, text #3D4852
-- Category badge colours: Places=#5B9A9A, Food=#7BA893, Activities=#D4A06A, System=#606F7B
-- Dev server: localhost:5161
-- E2E tests use relative href selectors (e.g. `a[href='settings']` not `a[href='/settings']`)
-- E2E test data seeding: use SetLocalStorageItemAsync to seed IndexedDB directly (more reliable than UI upload)
-- E2E infra issue: blazor-devserver 10.0.3 requires .NET 10.0 GA (only RC1 installed as of 2026-02-16)
-
+## 2026-02-18 - US-054
+- Updated HomePageTests.cs to assert 4 menu groups instead of 5
+- Removed separate assertions for Phonics (group 4) and Learning Cards (group 5) as separate groups
+- Added assertion that the 4th group (Learning) contains exactly 2 .menu-button elements
+- Files changed: tests/NowThenNext.Tests.E2E/Tests/HomePageTests.cs
+- **Learnings for future iterations:**
+  - The Home.razor currently has 4 menu groups: Schedule, Food, Activities, Learning (Phonics + Learning Cards combined)
+  - Tests were written when Phonics and Learning Cards were in separate groups; they were later merged
 ---
 
-## 2026-02-16 - US-049
-- Implemented StorageItemInfo record with Id, Label, Category, SizeBytes, ThumbnailData properties
-- Added GetStorageBreakdownAsync() to IImageStorageService interface
-- Implemented in LocalStorageImageService: iterates all images, serialises each individually, measures UTF-8 byte count
-- Also reads phonics-progress and learning-cards IndexedDB stores for system data sizes
-- Excludes null/empty entries, sorts descending by SizeBytes
-- Files changed: IImageStorageService.cs, LocalStorageImageService.cs
+## 2026-02-18 - US-056
+- Updated ScheduleDisplay.razor.cs to use GetAllImagesAsync() instead of GetImagesByCategoryAsync(ImageCategory.Places)
+- GetAllImagesAsync() already existed on IImageStorageService interface - no interface changes needed
+- Files changed: src/NowThenNext/Pages/ScheduleDisplay.razor.cs
 - **Learnings for future iterations:**
-  - StorageItemInfo.ThumbnailData holds the raw Base64Data from ImageItem (for thumbnail rendering in UI)
-  - System entries (phonics-progress, learning-cards) use `indexedDb.getItem(storeName)` directly to get raw JSON strings
-  - The `using System.Text;` import is needed for `Encoding.UTF8.GetByteCount`
-  - Images with empty labels get "Untitled" as the label in the breakdown
+  - IImageStorageService already has GetAllImagesAsync() available for cross-category lookups
 ---
 
-## 2026-02-16 - US-050
-- Added Storage Usage section to Settings.razor between Data Management and Attribution
-- Progress bar uses calm-primary (#5B9A9A), switches to calm-amber (#D4A06A) at >80% usage
-- FormatBytes helper: < 1024 = "< 1 KB", < 1MB = "X.X KB", >= 1MB = "X.X MB", >= 1GB = "X.X GB"
-- Added OnInitializedAsync to Settings.razor.cs to load storage info on page load
-- Files changed: Settings.razor, Settings.razor.cs
+## 2026-02-18 - US-055
+- Updated .github/workflows/deploy-to-github-pages.yml: actions/checkout@v6 → @v4, actions/setup-dotnet@v5 → @v4
+- Files changed: .github/workflows/deploy-to-github-pages.yml
 - **Learnings for future iterations:**
-  - Settings.razor uses code-behind (Settings.razor.cs), not inline @code blocks
-  - The settings-container class can be reused on new sections with `style="margin-top: 1.5rem;"` for spacing
-  - Use `CultureInfo.InvariantCulture` for percentage formatting in Razor to avoid locale issues
-  - Progress bar: simple div-in-div, percentage width via inline style, conditional colour via ternary
----
-
-## 2026-02-16 - US-051
-- Added scrollable item list below progress bar within the storage section
-- Each image item shows: 40px rounded thumbnail, label (or "Untitled"), category badge with colour, formatted size
-- System items (phonics-progress, learning-cards) show inline SVG icons instead of thumbnails
-- Category badge colours: Places=#5B9A9A, Food=#7BA893, Activities=#D4A06A, System=#606F7B
-- Max-height 400px with overflow-y scroll
-- Files changed: Settings.razor, Settings.razor.cs
-- **Learnings for future iterations:**
-  - GetCategoryColor switch expression maps category string to hex colour
-  - Use data-testid attributes ("storage-item-list", "storage-item") for E2E test selectors
-  - Image thumbnails rendered as `data:image/jpeg;base64,{Base64Data}` - works for all image types
-  - Subtle borders: #E2DFD8 for section divider, #F0EDE8 for row separators
----
-
-## 2026-02-16 - US-052
-- No new code changes needed - loading state was already implemented in US-050
-- IsLoadingStorage bool controls spinner display during data load
-- StorageError string shows friendly error message on failure
-- Spinner uses same animate-spin SVG as backup/restore buttons
-- try/catch in LoadStorageInfoAsync sets StorageError = "Unable to calculate storage usage" on failure
-- Files changed: none (already implemented)
-- **Learnings for future iterations:**
-  - When implementing UI sections, consider adding loading/error states upfront to avoid separate stories
----
-
-## 2026-02-16 - US-053
-- Created SettingsStorageTests.cs with 4 E2E tests for storage breakdown
-- Tests: section visibility, progress bar existence, image list with labels/sizes, descending sort order
-- Seeded test data directly via IndexedDB (SetLocalStorageItemAsync) instead of flaky file upload flow
-- E2E tests compile but cannot execute due to pre-existing infra issue: blazor-devserver 10.0.3 requires .NET 10.0 GA runtime, only RC1 installed
-- Files changed: SettingsStorageTests.cs (new)
-- **Learnings for future iterations:**
-  - All E2E tests are broken due to devserver package mismatch - needs .NET 10 GA or downgrade devserver
-  - Seeding IndexedDB directly is more reliable than going through the upload UI for test setup
-  - Use `data-testid` attributes for reliable E2E selectors (not CSS classes which may change)
-  - Category enum values: Places=0, Food=1, Activities=2 (used in JSON serialisation for seeding)
+  - As of 2026, valid stable GitHub Actions versions: actions/checkout@v4, actions/setup-dotnet@v4
 ---
