@@ -41,7 +41,7 @@ public partial class ScheduleDisplay : IDisposable
                 var imageIds = idsParam.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
                 // Load all images from storage and filter by IDs
-                var allImages = await ImageStorage.GetImagesByCategoryAsync(ImageCategory.Places);
+                var allImages = await ImageStorage.GetAllImagesAsync();
 
                 // Maintain the order from the query string
                 foreach (var id in imageIds)
