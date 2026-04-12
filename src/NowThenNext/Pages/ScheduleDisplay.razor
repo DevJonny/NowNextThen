@@ -13,7 +13,7 @@
     <!-- Auto-advance Toggle (only show when multiple items) -->
     @if (!IsLoading && ScheduleItems.Count > 1)
     {
-        <button @onclick="ToggleAutoAdvance" class="mode-toggle" aria-label="@(IsAutoAdvance ? "Switch to static view" : "Switch to auto-advance view")">
+        <button @onclick="ToggleAutoAdvance" class="mode-toggle" aria-label="@(IsAutoAdvance ? "Disable auto-advance" : "Enable auto-advance")">
             @if (IsAutoAdvance)
             {
                 <!-- Pause icon - indicates clicking will stop auto-advance -->
