@@ -1,7 +1,9 @@
-# NowThenNext - Claude Code Context
+# NowNextThen - Claude Code Context
+
+> Note: the product is branded **NowNextThen** (repo `DevJonny/NowNextThen`), but the .NET project folder, assembly, and namespace remain `NowThenNext` by design — file paths below are correct as written.
 
 ## Project Overview
-Visual schedule, food choice, and activity choice app for children with SEN (Special Educational Needs). Displays pictures in Now/Then/Next format to communicate daily plans and offers visual choice boards for food and activities.
+Visual schedule, food choice, and activity choice app for children with SEN (Special Educational Needs). Displays pictures in Now/Next/Then format to communicate daily plans and offers visual choice boards for food and activities.
 
 ## Tech Stack
 - **Framework**: Blazor WebAssembly (WASM) - .NET 10 RC (preview)
@@ -33,7 +35,7 @@ tests/NowThenNext.Tests.E2E/  # E2E tests with Playwright
 
 ## Core Features
 1. **Image Libraries**: Places, Food, Activities
-2. **Schedule Builder**: Select up to 3 places for Now/Then/Next display
+2. **Schedule Builder**: Select up to 3 places for Now/Next/Then display
 3. **Choice Boards**: Food Choices and Activity Choices (2-6 items)
 4. **Favorites**: Cross-category favorites view
 5. **Backup/Restore**: Export/import data as JSON
@@ -81,7 +83,7 @@ dotnet build
 | `/activities` | ActivitiesLibrary.razor | Activities image library |
 | `/upload` | Upload.razor | Image upload (optional category param) |
 | `/upload/{category}` | Upload.razor | Image upload with pre-selected category |
-| `/plan` | PlanDay.razor | Schedule selection (Now/Then/Next) |
+| `/plan` | PlanDay.razor | Schedule selection (Now/Next/Then) |
 | `/schedule` | ScheduleDisplay.razor | Schedule display (`?ids=id1,id2,id3`) |
 | `/food-choices` | FoodChoices.razor | Food choice selection |
 | `/food-display` | FoodDisplay.razor | Food display (`?ids=id1,id2,...`) |
@@ -182,7 +184,7 @@ public class MyTests(BlazorAppFixture fixture)
 
 ### Escape Characters in Razor
 - Use `@@keyframes` (double @) for CSS animations in `<style>` blocks
-- Arrow in title uses Unicode: `→` (displayed as "Now → Then → Next")
+- Arrow in title uses Unicode: `→` (displayed as "Now → Next → Then")
 
 ### Grid Layouts
 - Use `min-width: 0` on grid items to allow proper shrinking in CSS Grid
@@ -199,7 +201,7 @@ public class MyTests(BlazorAppFixture fixture)
 - Convert to base64 via `MemoryStream` and `Convert.ToBase64String`
 
 ### Selection Patterns
-- **Schedule (PlanDay)**: Max 3 items, numbered badges (1=Now, 2=Then, 3=Next)
+- **Schedule (PlanDay)**: Max 3 items, numbered badges (1=Now, 2=Next, 3=Then)
 - **Food Choices**: Min 2 items, no max limit, checkmark badges
 - **Activity Choices**: Min 2 items, no max limit, checkmark badges
 
@@ -235,10 +237,10 @@ When debugging 404s, routing errors, or broken assets in this app, check causes 
 4. Only after ruling out the above, investigate deeper causes (service workers, framework internals, server config).
 
 ## GitHub Pages Deployment
-This app deploys to GitHub Pages at a subdirectory path (`/NowThenNext/`).
+This app deploys to GitHub Pages at a subdirectory path (`/NowNextThen/`).
 - All asset references, navigation links, and API calls must use relative paths or respect `<base href>`
 - Never use absolute paths starting with `/` in HTML, Razor, or JS - they will 404 on GitHub Pages
-- The `<base href>` is set to `/` for dev and rewritten to `/NowThenNext/` during CI publish
+- The `<base href>` is set to `/` for dev and rewritten to `/NowNextThen/` during CI publish
 - After any bulk path changes, grep the entire project for remaining absolute paths: `href="/` and `src="/`
 
 ## Notes for Development
