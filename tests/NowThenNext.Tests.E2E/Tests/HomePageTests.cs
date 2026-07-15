@@ -34,7 +34,7 @@ public class HomePageTests
             // Clear localStorage for test isolation
             await page.ClearLocalStorageAsync();
 
-            // Assert - verify the app title is displayed (with arrow format: "Now → Then → Next")
+            // Assert - verify the app title is displayed (with arrow format: "Now → Next → Then")
             var title = await page.TextContentAsync("h1");
             Assert.Contains("Now", title, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Then", title, StringComparison.OrdinalIgnoreCase);

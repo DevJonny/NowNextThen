@@ -6,7 +6,7 @@ namespace NowThenNext.Tests.E2E.Tests;
 
 /// <summary>
 /// E2E tests for the schedule flow (Plan the Day).
-/// Tests selection of images, Now/Then/Next badges, and schedule display.
+/// Tests selection of images, Now/Next/Then badges, and schedule display.
 /// </summary>
 [Collection("BlazorApp")]
 public class ScheduleTests
@@ -48,7 +48,7 @@ public class ScheduleTests
     }
 
     [Fact]
-    public async Task SelectionShowsNowThenNextBadgesInOrder()
+    public async Task SelectionShowsNowNextThenBadgesInOrder()
     {
         // Arrange
         var page = await _fixture.CreatePageAsync();
@@ -70,16 +70,16 @@ public class ScheduleTests
             await tiles.Nth(1).ClickAsync();
             await tiles.Nth(2).ClickAsync();
 
-            // Assert - Check that badges show Now, Then, Next labels in order
+            // Assert - Check that badges show Now, Next, Then labels in order
             var badges = page.Locator(".selection-badge");
             var badgeLabels = page.Locator(".badge-label");
 
             // First badge should say "Now"
             await Assertions.Expect(badgeLabels.Nth(0)).ToContainTextAsync("Now");
-            // Second badge should say "Then"
-            await Assertions.Expect(badgeLabels.Nth(1)).ToContainTextAsync("Then");
-            // Third badge should say "Next"
-            await Assertions.Expect(badgeLabels.Nth(2)).ToContainTextAsync("Next");
+            // Second badge should say "Next"
+            await Assertions.Expect(badgeLabels.Nth(1)).ToContainTextAsync("Next");
+            // Third badge should say "Then"
+            await Assertions.Expect(badgeLabels.Nth(2)).ToContainTextAsync("Then");
         }
         finally
         {
@@ -233,10 +233,10 @@ public class ScheduleTests
             await page.WaitForURLAsync(new System.Text.RegularExpressions.Regex("/schedule"), new PageWaitForURLOptions { Timeout = 10000 });
             await page.WaitForSelectorAsync(".schedule-display, .auto-advance-display", new PageWaitForSelectorOptions { Timeout = 60000 });
 
-            // Assert - Schedule items should be displayed with Now and Then labels
+            // Assert - Schedule items should be displayed with Now and Next labels
             var itemLabels = page.Locator(".item-label");
             await Assertions.Expect(itemLabels.First).ToContainTextAsync("Now");
-            await Assertions.Expect(itemLabels.Nth(1)).ToContainTextAsync("Then");
+            await Assertions.Expect(itemLabels.Nth(1)).ToContainTextAsync("Next");
 
             // Assert - The schedule items should have images visible
             var scheduleItems = page.Locator(".schedule-item");

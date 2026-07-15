@@ -65,8 +65,8 @@ public partial class PlanDay
         return index switch
         {
             0 => "Now",
-            1 => "Then",
-            2 => "Next",
+            1 => "Next",
+            2 => "Then",
             _ => ""
         };
     }
