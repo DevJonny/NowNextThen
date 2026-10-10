@@ -40,6 +40,7 @@ tests/NowThenNext.Tests.E2E/  # E2E tests with Playwright
 4. **Favorites**: Cross-category favorites view
 5. **Backup/Restore**: Export/import data as JSON
 6. **Phonics Flashcards**: UK Letters and Sounds Phases 2-5 with sequential unlocking and progress tracking
+7. **Cloud Sync (Google Drive)**: Optional cross-device sync of images, learning cards, and phonics progress via Drive `appDataFolder`
 
 ## Current Status
 - Branch: `ralph/phonics-flashcards` (phonics feature in progress)
@@ -73,6 +74,7 @@ dotnet build
 - **Reusable components**: ImageTile component shared across all libraries
 - **Parallel workflows**: Food Choices and Activity Choices follow same pattern as templates
 - **Static data service**: Phonics GPC data is hardcoded in `PhonicsDataService` (singleton), progress tracked in `PhonicsProgressService` (scoped, uses IndexedDB store `phonics-progress`)
+- **Cloud Sync**: `Services/Sync/SyncService.cs` (scoped) orchestrates sync; `Services/Sync/SyncMergeEngine.cs` is the pure, unit-tested per-entity last-write-wins + tombstone merge. Auth and Drive HTTP live in JS (`wwwroot/js/googleAuth.js` = GIS token flow, `wwwroot/js/googleDrive.js` = Drive `appDataFolder` file access exposing `window.driveSync`). The whole dataset syncs as one JSON file `nownextthen-sync.json`. Storage services raise a `DataChanged` event that `SyncService` debounces (2s) — storage services never depend on `SyncService` (no DI cycle). `SyncService.ApplyMergedAsync` on each store writes pulled data **without** raising `DataChanged` (avoids a sync loop). Init runs once in `MainLayout.OnAfterRenderAsync(firstRender)`. **OAuth `CLIENT_ID` in `googleAuth.js` must be set per deployment** — see README "Cloud Sync setup".
 
 ## Routing Map
 | Route | Page | Description |
@@ -107,8 +109,11 @@ public class ImageItem
     public ImageCategory Category { get; set; } // Places/Food/Activities
     public bool IsFavorite { get; set; }     // Favorited flag
     public DateTime CreatedAt { get; set; }  // Creation timestamp
+    public DateTime LastModifiedUtc { get; set; } // Sync: newest wins on merge
+    public bool IsDeleted { get; set; }      // Sync: soft-delete tombstone
 }
 ```
+> `ImageItem`, `LearningCategory`, and `LearningCard` implement `ISyncEntity` (`Id` + `LastModifiedUtc` + `IsDeleted`). Deletes are **soft** (tombstones) so they propagate across devices; user-facing reads filter out `IsDeleted`. Phonics progress is stored as a `Dictionary<string, PhonicsCardProgress>` (per-card `Completed` + `LastModifiedUtc`), migrated transparently from the old `HashSet<string>` shape on read.
 
 ### ImageCategory Enum
 ```csharp
@@ -226,8 +231,10 @@ public class MyTests(BlazorAppFixture fixture)
 - **Use RELATIVE paths in href selectors** (e.g., `a[href='phonics']` NOT `a[href='/phonics']`) - Blazor renders relative hrefs in the DOM
 
 ## Test Status
-- **Test Files**: HomePageTests, UploadTests, LibraryTests, ScheduleTests, FoodChoicesTests, ActivityChoicesTests, BackupRestoreTests, PhonicsTests, LearningCardsTests
+- **E2E (`tests/NowThenNext.Tests.E2E`, Playwright)**: HomePageTests, UploadTests, LibraryTests, ScheduleTests, FoodChoicesTests, ActivityChoicesTests, BackupRestoreTests, PhonicsTests, LearningCardsTests, CloudSyncTests (signed-out sync UI)
+- **Unit (`tests/NowThenNext.Tests.Unit`, xUnit v3)**: `SyncMergeEngineTests` covers the merge engine (LWW, tombstone propagation, 90-day GC, phonics map merge). Run with `dotnet test tests/NowThenNext.Tests.Unit`.
 - **Coverage**: All user stories (US-001 to US-037, US-046 to US-048)
+- Note: Google Drive sign-in uses a Google popup that can't be automated in Playwright, so sync E2E is limited to the signed-out UI.
 
 ## Debugging Priorities
 When debugging 404s, routing errors, or broken assets in this app, check causes in this order:

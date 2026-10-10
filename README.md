@@ -30,6 +30,9 @@ Similar to food choices - upload activity pictures and let the child select from
 ### Backup & Restore
 Export all images and settings to a JSON file for safekeeping, and restore from backup on any device.
 
+### Cloud Sync (Google Drive)
+Optionally sign in with Google to keep your images, custom learning cards, and phonics progress in sync across devices. Data is stored in your Drive's hidden **app data folder** (scope `drive.appdata`) — the app can only see its own file, never the rest of your Drive. Changes merge per-item (newest edit wins) with deletions propagating across devices, so two devices can both make changes without clobbering each other. See [Cloud Sync setup](#cloud-sync-setup) to configure the OAuth client.
+
 ### Install as App (PWA)
 Install NowThenNext to your device's home screen for a full-screen, app-like experience. The app works offline after installation and automatically updates when new versions are available.
 
@@ -42,7 +45,23 @@ Install NowThenNext to your device's home screen for a full-screen, app-like exp
 
 ## Technology
 
-Built with Blazor WebAssembly and Tailwind CSS. All data is stored locally in the browser using localStorage - no account or internet connection required after initial load.
+Built with Blazor WebAssembly and Tailwind CSS. All data is stored locally in the browser using IndexedDB - no account or internet connection required after initial load. Optional Google Drive sync layers on top without changing the offline-first model.
+
+## Cloud Sync setup
+
+Cloud Sync needs a Google OAuth 2.0 **Web application** client id. It's a public identifier (safe to commit), but each deployment must register its own because the allowed origins differ.
+
+1. In the [Google Cloud Console](https://console.cloud.google.com/), create (or pick) a project.
+2. **APIs & Services → Library**: enable the **Google Drive API**.
+3. **OAuth consent screen**: choose *External*; add the scope `https://www.googleapis.com/auth/drive.appdata`; add your Google account under *Test users* (or publish the app).
+4. **Credentials → Create credentials → OAuth client ID → Web application**. Under *Authorized JavaScript origins* add (origin = scheme + host + port, **no path**):
+   - `http://localhost:5161` (local dev)
+   - `https://<your-username>.github.io` (GitHub Pages — the `/NowNextThen/` sub-path is not part of the origin, so this one entry covers it)
+
+   No redirect URIs are needed — Google Identity Services uses a popup token flow.
+5. Copy the generated client id into `CLIENT_ID` in [`src/NowThenNext/wwwroot/js/googleAuth.js`](src/NowThenNext/wwwroot/js/googleAuth.js).
+
+Once configured, open **Settings → Cloud Sync → Sign in to Google Drive**. The Home screen shows a small status dot (grey = signed out, teal pulse = syncing, green = synced, amber = error).
 
 ## License
 

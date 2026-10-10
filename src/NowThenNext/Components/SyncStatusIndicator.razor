@@ -1,0 +1,86 @@
+@implements IDisposable
+@inject NowThenNext.Services.Sync.SyncService Sync
+@inject NavigationManager Navigation
+
+<button type="button" class="sync-indicator" @onclick="GoToSettings" title="@Label" aria-label="@Label">
+    <span class="sync-dot @DotClass"></span>
+</button>
+
+@code {
+    protected override void OnInitialized() => Sync.StatusChanged += OnStatusChanged;
+
+    private void OnStatusChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Sync.StatusChanged -= OnStatusChanged;
+
+    private void GoToSettings() => Navigation.NavigateTo("settings");
+
+    private string DotClass => Sync.Status switch
+    {
+        SyncStatus.Synced => "is-synced",
+        SyncStatus.Syncing => "is-syncing",
+        SyncStatus.Error => "is-error",
+        SyncStatus.Idle => "is-idle",
+        _ => "is-signed-out"
+    };
+
+    private string Label => Sync.Status switch
+    {
+        SyncStatus.Synced => "Synced to Google Drive",
+        SyncStatus.Syncing => "Syncing to Google Drive…",
+        SyncStatus.Error => "Sync error — open Settings",
+        SyncStatus.Idle => "Cloud sync ready",
+        _ => "Cloud sync — sign in via Settings"
+    };
+}
+
+<style>
+    .sync-indicator {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 3rem; /* 48px touch target */
+        height: 3rem;
+        border: none;
+        background-color: transparent;
+        border-radius: 0.5rem;
+        cursor: pointer;
+        pointer-events: auto;
+        transition: background-color 0.2s ease;
+    }
+
+    .sync-indicator:hover {
+        background-color: rgba(91, 154, 154, 0.1);
+    }
+
+    .sync-dot {
+        width: 0.75rem;
+        height: 0.75rem;
+        border-radius: 9999px;
+        background-color: #B8B2A7; /* calm grey - signed out */
+        transition: background-color 0.3s ease;
+    }
+
+    .sync-dot.is-idle {
+        background-color: #7BA3C4; /* calm phonics blue */
+    }
+
+    .sync-dot.is-synced {
+        background-color: #6B9A7D; /* calm success green */
+    }
+
+    .sync-dot.is-error {
+        background-color: #D4A06A; /* calm amber - never harsh red */
+    }
+
+    /* Gentle pulse while syncing (calm, ~3s) */
+    .sync-dot.is-syncing {
+        background-color: #5B9A9A; /* calm primary teal */
+        animation: sync-pulse 3s ease-in-out infinite;
+    }
+
+    @@keyframes sync-pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.35; }
+    }
+</style>

@@ -8,6 +8,12 @@ namespace NowThenNext.Services;
 public interface IImageStorageService
 {
     /// <summary>
+    /// Raised after a local mutation (save/delete/favorite/restore) so the sync
+    /// engine can schedule an upload. Not raised by <see cref="ApplyMergedAsync"/>.
+    /// </summary>
+    event Action? DataChanged;
+
+    /// <summary>
     /// Save an image to localStorage
     /// </summary>
     Task SaveImageAsync(ImageItem image);
@@ -66,6 +72,18 @@ public interface IImageStorageService
     /// Get a breakdown of storage usage per item, sorted by size descending
     /// </summary>
     Task<List<StorageItemInfo>> GetStorageBreakdownAsync();
+
+    /// <summary>
+    /// Full snapshot for sync, including soft-deleted tombstones and normalized
+    /// sync metadata. Not for UI use.
+    /// </summary>
+    Task<List<ImageItem>> GetSyncSnapshotAsync();
+
+    /// <summary>
+    /// Overwrite local storage with a merged image list (including tombstones).
+    /// Does not raise <see cref="DataChanged"/>.
+    /// </summary>
+    Task ApplyMergedAsync(List<ImageItem> images);
 }
 
 /// <summary>

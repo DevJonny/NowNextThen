@@ -4,10 +4,11 @@ using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.JSInterop;
 using NowThenNext.Models;
 using NowThenNext.Services;
+using NowThenNext.Services.Sync;
 
 namespace NowThenNext.Pages;
 
-public partial class Settings
+public partial class Settings : IDisposable
 {
     [Inject]
     private NavigationManager Navigation { get; set; } = default!;
@@ -20,6 +21,9 @@ public partial class Settings
 
     [Inject]
     private ILearningCardsDataService LearningCards { get; set; } = default!;
+
+    [Inject]
+    private SyncService Sync { get; set; } = default!;
 
     private bool IsBackingUp { get; set; }
     private bool IsRestoring { get; set; }
@@ -37,7 +41,43 @@ public partial class Settings
 
     protected override async Task OnInitializedAsync()
     {
+        Sync.StatusChanged += OnSyncStatusChanged;
         await LoadStorageInfoAsync();
+    }
+
+    // --- Cloud Sync ---
+
+    private bool IsSyncBusy => Sync.Status == SyncStatus.Syncing;
+
+    private string SyncStatusSlug => Sync.Status switch
+    {
+        SyncStatus.Synced => "synced",
+        SyncStatus.Syncing => "syncing",
+        SyncStatus.Error => "error",
+        SyncStatus.Idle => "idle",
+        _ => "signed-out"
+    };
+
+    private string SyncStatusLabel => Sync.Status switch
+    {
+        SyncStatus.Synced => "Synced",
+        SyncStatus.Syncing => "Syncing…",
+        SyncStatus.Error => "Sync error",
+        SyncStatus.Idle => "Connected",
+        _ => "Not signed in"
+    };
+
+    private void OnSyncStatusChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task SignIn() => await Sync.SignInAsync();
+
+    private async Task SyncNow() => await Sync.SyncNowAsync();
+
+    private async Task SignOut() => await Sync.SignOutAsync();
+
+    public void Dispose()
+    {
+        Sync.StatusChanged -= OnSyncStatusChanged;
     }
 
     private async Task LoadStorageInfoAsync()
