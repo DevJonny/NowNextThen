@@ -12,11 +12,10 @@ public class SyncReplaceTests
     {
         Id = id,
         Label = label,
+        CreatedAt = Base,
         LastModifiedUtc = modified,
         IsDeleted = deleted
     };
-
-    private static bool SameLabel(ImageItem a, ImageItem b) => a.IsDeleted == b.IsDeleted && a.Label == b.Label;
 
     [Fact]
     public void OmittedRecord_BecomesTombstoneStampedNow()
@@ -24,7 +23,7 @@ public class SyncReplaceTests
         var stored = new List<ImageItem> { Img("1", Base), Img("2", Base) };
         var incoming = new List<ImageItem> { Img("1", Base) };
 
-        var result = SyncReplace.ReplaceAll(stored, incoming, Now, SameLabel);
+        var result = SyncReplace.ReplaceAll(stored, incoming, Now);
 
         var omitted = Assert.Single(result, i => i.Id == "2");
         Assert.True(omitted.IsDeleted);
@@ -37,7 +36,7 @@ public class SyncReplaceTests
         var stored = new List<ImageItem> { Img("1", Base) };
         var incoming = new List<ImageItem> { Img("1", Base) };
 
-        var result = SyncReplace.ReplaceAll(stored, incoming, Now, SameLabel);
+        var result = SyncReplace.ReplaceAll(stored, incoming, Now);
 
         Assert.Equal(Base, Assert.Single(result).LastModifiedUtc);
     }
@@ -48,7 +47,7 @@ public class SyncReplaceTests
         var stored = new List<ImageItem> { Img("1", Base, label: "old") };
         var incoming = new List<ImageItem> { Img("1", Base, label: "new"), Img("2", Base) };
 
-        var result = SyncReplace.ReplaceAll(stored, incoming, Now, SameLabel);
+        var result = SyncReplace.ReplaceAll(stored, incoming, Now);
 
         Assert.All(result, i => Assert.Equal(Now, i.LastModifiedUtc));
     }
@@ -59,7 +58,7 @@ public class SyncReplaceTests
         var stored = new List<ImageItem> { Img("1", Base, deleted: true) };
         var incoming = new List<ImageItem> { Img("1", Base) };
 
-        var result = SyncReplace.ReplaceAll(stored, incoming, Now, SameLabel);
+        var result = SyncReplace.ReplaceAll(stored, incoming, Now);
 
         var item = Assert.Single(result);
         Assert.False(item.IsDeleted);
@@ -71,7 +70,7 @@ public class SyncReplaceTests
     {
         var stored = new List<ImageItem> { Img("1", Base, deleted: true) };
 
-        var result = SyncReplace.ReplaceAll(stored, new List<ImageItem>(), Now, SameLabel);
+        var result = SyncReplace.ReplaceAll(stored, new List<ImageItem>(), Now);
 
         Assert.Equal(Base, Assert.Single(result).LastModifiedUtc);
     }

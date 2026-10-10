@@ -216,18 +216,11 @@ public class LocalStorageImageService : IImageStorageService
     public async Task SaveImagesAsync(List<ImageItem> images)
     {
         var stored = await GetRawImagesAsync();
-        var result = SyncReplace.ReplaceAll(stored, images, DateTime.UtcNow, SameContent);
+        var result = SyncReplace.ReplaceAll(stored, images, DateTime.UtcNow);
 
         await SaveAllImagesAsync(result);
         RaiseDataChanged();
     }
-
-    private static bool SameContent(ImageItem a, ImageItem b) =>
-        a.IsDeleted == b.IsDeleted
-        && a.Base64Data == b.Base64Data
-        && a.Label == b.Label
-        && a.Category == b.Category
-        && a.IsFavorite == b.IsFavorite;
 
     public async Task<List<ImageItem>> GetSyncSnapshotAsync()
     {

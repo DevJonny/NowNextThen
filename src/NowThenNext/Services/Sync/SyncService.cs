@@ -21,6 +21,8 @@ public partial class SyncService
 
     private const int DebounceMs = 2000;
     private const int MaxRetries = 3;
+    private const int FirstOfflineRetryMs = 15_000;
+    private const int MaxOfflineRetryMs = 5 * 60_000;
 
     // The envelope round-trips through Drive as a string, deserialized here — so use
     // one options instance for both directions. (Default = PascalCase property names.)
@@ -30,6 +32,10 @@ public partial class SyncService
     private bool _syncRequestedWhileInFlight;
     private bool _initialized;
     private CancellationTokenSource? _debounceCts;
+    private int _offlineRetryMs = FirstOfflineRetryMs;
+
+    // Bumped on every local edit, so a sync can tell an edit landed after it read the snapshots.
+    private int _localEditCount;
 
     public SyncService(
         IJSRuntime js,
@@ -43,9 +49,9 @@ public partial class SyncService
         _phonics = phonics;
 
         // Auto-schedule a sync whenever local data changes (app lifetime; no unsubscribe).
-        _images.DataChanged += ScheduleSync;
-        _learning.DataChanged += ScheduleSync;
-        _phonics.DataChanged += ScheduleSync;
+        _images.DataChanged += OnLocalDataChanged;
+        _learning.DataChanged += OnLocalDataChanged;
+        _phonics.DataChanged += OnLocalDataChanged;
     }
 
     public SyncStatus Status { get; private set; } = SyncStatus.NotSignedIn;
@@ -123,20 +129,28 @@ public partial class SyncService
         SetStatus(SyncStatus.NotSignedIn);
     }
 
+    private void OnLocalDataChanged()
+    {
+        _localEditCount++;
+        ScheduleSync();
+    }
+
     /// <summary>Debounced sync after a local change.</summary>
-    public void ScheduleSync()
+    public void ScheduleSync() => ScheduleSyncAfter(DebounceMs);
+
+    private void ScheduleSyncAfter(int delayMs)
     {
         if (Status is SyncStatus.NotSignedIn or SyncStatus.NeedsReconnect) return;
 
         _debounceCts?.Cancel();
         var cts = new CancellationTokenSource();
         _debounceCts = cts;
-        _ = DebouncedSyncAsync(cts.Token);
+        _ = DelayedSyncAsync(delayMs, cts.Token);
     }
 
-    private async Task DebouncedSyncAsync(CancellationToken ct)
+    private async Task DelayedSyncAsync(int delayMs, CancellationToken ct)
     {
-        try { await Task.Delay(DebounceMs, ct); }
+        try { await Task.Delay(delayMs, ct); }
         catch (TaskCanceledException) { return; }
         if (!ct.IsCancellationRequested)
             await SyncNowAsync();
@@ -168,6 +182,7 @@ public partial class SyncService
         {
             await RunWithRetryAsync();
             LastSyncedUtc = DateTime.UtcNow;
+            _offlineRetryMs = FirstOfflineRetryMs;
             SetStatus(SyncStatus.Synced);
         }
         catch (JSException jsex)
@@ -179,8 +194,11 @@ public partial class SyncService
             }
             else if (IsNetworkError(jsex.Message))
             {
-                // Transient network failure — keep local state, revert quietly.
+                // Transient network failure: keep local state, and retry with backoff so an
+                // edit made offline still uploads once the connection is back.
                 SetStatus(SyncStatus.Idle);
+                ScheduleSyncAfter(_offlineRetryMs);
+                _offlineRetryMs = Math.Min(_offlineRetryMs * 2, MaxOfflineRetryMs);
             }
             else
             {
@@ -219,11 +237,17 @@ public partial class SyncService
                 await PerformSyncAsync();
                 return;
             }
+            catch (LocalEditDuringSyncException)
+            {
+                // Merge result is stale. Out of retries is fine: the edit already queued a sync.
+                if (attempt < MaxRetries - 1) continue;
+                return;
+            }
             catch (JSException jsex)
             {
                 var status = ParseDriveStatus(jsex.Message);
                 if (status == 412 && attempt < MaxRetries - 1)
-                    continue; // etag conflict — re-download and merge again
+                    continue; // another device wrote first — re-download and merge again
 
                 throw; // 401 can't be retried without a user gesture; SyncNowAsync asks to reconnect.
             }
@@ -249,6 +273,7 @@ public partial class SyncService
                 remote = remote == null ? envelope : MergeEnvelopes(remote, envelope);
         }
 
+        var editCountAtSnapshot = _localEditCount;
         var localImages = await _images.GetSyncSnapshotAsync();
         var localLearning = await _learning.GetSyncSnapshotAsync();
         var localPhonics = await _phonics.GetSyncSnapshotAsync();
@@ -276,8 +301,12 @@ public partial class SyncService
 
         if (localChanged)
         {
+            // Writing a merge built from snapshots older than a local edit would erase that edit.
+            EnsureNoLocalEditsSince(editCountAtSnapshot);
             await _images.ApplyMergedAsync(imageMerge.Merged);
+            EnsureNoLocalEditsSince(editCountAtSnapshot);
             await _learning.ApplyMergedAsync(mergedLearning);
+            EnsureNoLocalEditsSince(editCountAtSnapshot);
             await _phonics.ApplyMergedAsync(phonicsMerge.Merged);
         }
 
@@ -293,13 +322,20 @@ public partial class SyncService
             };
 
             var envelopeJson = JsonSerializer.Serialize(envelope, EnvelopeJson);
-            await _js.InvokeVoidAsync("driveSync.uploadSyncFile", envelopeJson, existing?.Id, existing?.Etag);
+            await _js.InvokeVoidAsync("driveSync.uploadSyncFile", envelopeJson, existing?.Id, existing?.Version);
         }
 
         // Only after the merged data is safely in the oldest file.
         foreach (var duplicate in duplicates)
             await _js.InvokeVoidAsync("driveSync.deleteSyncFile", duplicate.Id);
     }
+
+    private void EnsureNoLocalEditsSince(int editCount)
+    {
+        if (_localEditCount != editCount) throw new LocalEditDuringSyncException();
+    }
+
+    private sealed class LocalEditDuringSyncException : Exception;
 
     private static SyncEnvelope MergeEnvelopes(SyncEnvelope a, SyncEnvelope b) => new()
     {
@@ -334,10 +370,10 @@ public partial class SyncService
     [GeneratedRegex(@"DRIVE_ERROR:(\d+):")]
     private static partial Regex DriveErrorRegex();
 
-    /// <summary>Small handle for the Drive sync file returned by JS (<c>{ id, etag }</c>).</summary>
+    /// <summary>Small handle for a Drive sync file returned by JS (<c>{ id, version }</c>).</summary>
     private sealed class DriveFileHandle
     {
         public string Id { get; set; } = string.Empty;
-        public string? Etag { get; set; }
+        public string? Version { get; set; }
     }
 }
