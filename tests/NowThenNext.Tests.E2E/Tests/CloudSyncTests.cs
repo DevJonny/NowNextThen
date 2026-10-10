@@ -89,4 +89,39 @@ public class CloudSyncTests
             await page.CloseAsync();
         }
     }
+
+    [Fact]
+    public async Task ExpiredSession_ShowsReconnectWithoutPopup()
+    {
+        var page = await _fixture.CreatePageAsync();
+
+        try
+        {
+            await page.GotoAsync(_fixture.BaseUrl);
+            await page.WaitForSelectorAsync("h1", new PageWaitForSelectorOptions { Timeout = 60000 });
+            await page.ClearLocalStorageAsync();
+
+            // Previously connected, but no token survives in this browser session.
+            await page.EvaluateAsync("() => localStorage.setItem('google-auth-connected', 'true')");
+            await page.ReloadAsync();
+            await page.WaitForSelectorAsync("h1", new PageWaitForSelectorOptions { Timeout = 60000 });
+
+            var indicator = page.Locator("button.sync-indicator");
+            await Assertions.Expect(indicator).ToHaveAttributeAsync("aria-label", "Cloud sync paused — reconnect via Settings",
+                new LocatorAssertionsToHaveAttributeOptions { Timeout = 10000 });
+
+            await indicator.ClickAsync();
+            await page.WaitForSelectorAsync("h2:has-text('Cloud Sync')", new PageWaitForSelectorOptions { Timeout = 10000 });
+
+            await Assertions.Expect(page.Locator(".sync-status-badge.sync-reconnect")).ToHaveTextAsync("Needs reconnecting");
+            await Assertions.Expect(page.Locator("button:has-text('Reconnect Google Drive')")).ToBeVisibleAsync();
+            await Assertions.Expect(page.Locator("button:has-text('Sign out')")).ToBeVisibleAsync();
+            await Assertions.Expect(page.Locator("button:has-text('Sync now')")).ToHaveCountAsync(0);
+        }
+        finally
+        {
+            await page.EvaluateAsync("() => localStorage.removeItem('google-auth-connected')");
+            await page.CloseAsync();
+        }
+    }
 }

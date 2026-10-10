@@ -164,17 +164,34 @@
                 }
                 else
                 {
-                    <button class="settings-action-button" @onclick="SyncNow" disabled="@IsSyncBusy">
-                        <div class="action-icon">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 @(Sync.Status == SyncStatus.Syncing ? "animate-spin" : "")" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
-                        </div>
-                        <div class="action-content">
-                            <span class="action-title">@(Sync.Status == SyncStatus.Syncing ? "Syncing..." : "Sync now")</span>
-                            <span class="action-description">Merge changes with Google Drive</span>
-                        </div>
-                    </button>
+                    @if (Sync.Status == SyncStatus.NeedsReconnect)
+                    {
+                        <button class="settings-action-button" @onclick="SignIn" disabled="@IsSyncBusy">
+                            <div class="action-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 001-9.9A5.002 5.002 0 007 8a4.002 4.002 0 00-3.9 3.06A3.5 3.5 0 003 15z" />
+                                </svg>
+                            </div>
+                            <div class="action-content">
+                                <span class="action-title">Reconnect Google Drive</span>
+                                <span class="action-description">Your sign-in expired. Reconnect to keep syncing</span>
+                            </div>
+                        </button>
+                    }
+                    else
+                    {
+                        <button class="settings-action-button" @onclick="SyncNow" disabled="@IsSyncBusy">
+                            <div class="action-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 @(Sync.Status == SyncStatus.Syncing ? "animate-spin" : "")" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                            </div>
+                            <div class="action-content">
+                                <span class="action-title">@(Sync.Status == SyncStatus.Syncing ? "Syncing..." : "Sync now")</span>
+                                <span class="action-description">Merge changes with Google Drive</span>
+                            </div>
+                        </button>
+                    }
 
                     <button class="settings-action-button" @onclick="SignOut" disabled="@IsSyncBusy">
                         <div class="action-icon restore-icon">
@@ -651,6 +668,9 @@
 
     .sync-error .sync-status-dot { background-color: #D4A06A; }
     .sync-error { color: #C08B55; background-color: rgba(212, 160, 106, 0.15); }
+
+    .sync-reconnect .sync-status-dot { background-color: #D4A06A; }
+    .sync-reconnect { color: #C08B55; background-color: rgba(212, 160, 106, 0.15); }
 
     .sync-last-synced {
         font-size: 0.8125rem;

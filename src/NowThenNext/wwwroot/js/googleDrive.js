@@ -15,11 +15,9 @@
 
     async function authedFetch(url, init) {
         init = init || {};
-        let token = window.googleAuth.getAccessToken();
-        if (!token) {
-            token = await window.googleAuth.signIn();
-            if (!token) throw driveError(401, "Not signed in");
-        }
+        // Never prompts: a sign-in popup needs a user gesture, so SyncService asks the user to reconnect.
+        const token = window.googleAuth.getAccessToken();
+        if (!token) throw driveError(401, "Not signed in");
         const headers = new Headers(init.headers || {});
         headers.set("Authorization", "Bearer " + token);
         const resp = await fetch(url, Object.assign({}, init, { headers }));
@@ -33,16 +31,29 @@
         return resp;
     }
 
-    async function findSyncFile() {
-        const q = encodeURIComponent("name='" + FILE_NAME + "'");
-        const url = API + "/files?spaces=appDataFolder&q=" + q + "&fields=files(id)";
+    // Returns every sync file, oldest first. Two devices syncing for the first time at once
+    // can each create one; SyncService merges them all into the oldest (so every device picks
+    // the same one) and deletes the rest. Only the oldest gets an ETag, as it's the one updated.
+    async function findSyncFiles() {
+        const q = encodeURIComponent("name='" + FILE_NAME + "' and trashed=false");
+        const url = API + "/files?spaces=appDataFolder&q=" + q + "&orderBy=createdTime&fields=files(id)";
         const resp = await authedFetch(url);
         const data = await resp.json();
-        const first = data.files && data.files[0];
-        if (!first) return null;
+        const files = (data.files || []).map(f => ({ id: f.id, etag: null }));
+        if (files.length === 0) return files;
         // Drive doesn't support HEAD here; GET the metadata to read the ETag header.
-        const meta = await authedFetch(API + "/files/" + first.id + "?spaces=appDataFolder&fields=id");
-        return { id: first.id, etag: meta.headers.get("ETag") };
+        const meta = await authedFetch(API + "/files/" + files[0].id + "?fields=id");
+        files[0].etag = meta.headers.get("ETag");
+        return files;
+    }
+
+    async function deleteSyncFile(fileId) {
+        try {
+            await authedFetch(API + "/files/" + fileId, { method: "DELETE" });
+        } catch (e) {
+            // Already deleted by another device — nothing to do.
+            if (!String(e.message).startsWith("DRIVE_ERROR:404:")) throw e;
+        }
     }
 
     async function downloadSyncFile(fileId) {
@@ -92,8 +103,9 @@
     }
 
     window.driveSync = {
-        findSyncFile: findSyncFile,
+        findSyncFiles: findSyncFiles,
         downloadSyncFile: downloadSyncFile,
-        uploadSyncFile: uploadSyncFile
+        uploadSyncFile: uploadSyncFile,
+        deleteSyncFile: deleteSyncFile
     };
 })();

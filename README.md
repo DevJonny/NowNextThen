@@ -62,7 +62,7 @@ Cloud Sync needs a Google OAuth 2.0 **Web application** client id. It's a public
 5. Add the generated client id as a repository variable named `GOOGLE_CLIENT_ID` (**Settings → Secrets and variables → Actions → Variables**). The deploy workflow injects it into the published `googleAuth.js` and fails if it's missing.
 6. For local dev, temporarily paste the client id into `CLIENT_ID` in [`src/NowThenNext/wwwroot/js/googleAuth.js`](src/NowThenNext/wwwroot/js/googleAuth.js) — don't commit it; the workflow expects the placeholder.
 
-Once configured, open **Settings → Cloud Sync → Sign in to Google Drive**. The Home screen shows a small status dot (grey = signed out, teal pulse = syncing, green = synced, amber = error).
+Once configured, open **Settings → Cloud Sync → Sign in to Google Drive**. The Home screen shows a small status dot (grey = signed out, teal pulse = syncing, green = synced, amber = error or reconnect needed). Google sign-in lasts about an hour and can only be renewed by a tap, so after that (or when reopening the app later) tap **Reconnect Google Drive** in Settings; local changes made meanwhile sync on reconnect.
 
 ## License
 
