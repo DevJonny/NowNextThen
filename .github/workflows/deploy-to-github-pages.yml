@@ -35,6 +35,20 @@ jobs:
       - name: Publish
         run: dotnet publish src/NowThenNext/NowThenNext.csproj -c Release -o release --nologo
 
+      - name: Inject Google OAuth client id
+        env:
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+        run: |
+          if [ -z "$GOOGLE_CLIENT_ID" ]; then
+            echo "::error::GOOGLE_CLIENT_ID repository variable is not set"
+            exit 1
+          fi
+          sed -i "s|REPLACE_WITH_YOUR_CLIENT_ID.apps.googleusercontent.com|$GOOGLE_CLIENT_ID|" release/wwwroot/js/googleAuth.js
+          if grep -q "REPLACE_WITH_YOUR_CLIENT_ID" release/wwwroot/js/googleAuth.js; then
+            echo "::error::CLIENT_ID placeholder was not replaced in googleAuth.js"
+            exit 1
+          fi
+
       - name: Prepare GitHub Pages
         run: |
           sed -i 's|<base href="/" />|<base href="/NowNextThen/" />|g' release/wwwroot/index.html
