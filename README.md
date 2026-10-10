@@ -49,7 +49,7 @@ Built with Blazor WebAssembly and Tailwind CSS. All data is stored locally in th
 
 ## Cloud Sync setup
 
-Cloud Sync needs a Google OAuth 2.0 **Web application** client id. It's a public identifier (safe to commit), but each deployment must register its own because the allowed origins differ.
+Cloud Sync needs a Google OAuth 2.0 **Web application** client id. It's a public identifier, but each deployment registers its own because the allowed origins differ.
 
 1. In the [Google Cloud Console](https://console.cloud.google.com/), create (or pick) a project.
 2. **APIs & Services → Library**: enable the **Google Drive API**.
@@ -59,7 +59,8 @@ Cloud Sync needs a Google OAuth 2.0 **Web application** client id. It's a public
    - `https://<your-username>.github.io` (GitHub Pages — the `/NowNextThen/` sub-path is not part of the origin, so this one entry covers it)
 
    No redirect URIs are needed — Google Identity Services uses a popup token flow.
-5. Copy the generated client id into `CLIENT_ID` in [`src/NowThenNext/wwwroot/js/googleAuth.js`](src/NowThenNext/wwwroot/js/googleAuth.js).
+5. Add the generated client id as a repository variable named `GOOGLE_CLIENT_ID` (**Settings → Secrets and variables → Actions → Variables**). The deploy workflow injects it into the published `googleAuth.js` and fails if it's missing.
+6. For local dev, temporarily paste the client id into `CLIENT_ID` in [`src/NowThenNext/wwwroot/js/googleAuth.js`](src/NowThenNext/wwwroot/js/googleAuth.js) — don't commit it; the workflow expects the placeholder.
 
 Once configured, open **Settings → Cloud Sync → Sign in to Google Drive**. The Home screen shows a small status dot (grey = signed out, teal pulse = syncing, green = synced, amber = error).
 

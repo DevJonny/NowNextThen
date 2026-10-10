@@ -1,7 +1,8 @@
 // Google Identity Services (GIS) token flow for NowNextThen.
 // Ported from DiceCalc's googleAuth.ts. Exposes window.googleAuth for Blazor interop.
 //
-// SETUP: replace CLIENT_ID below with your own OAuth 2.0 Web client id (see README).
+// SETUP: CLIENT_ID is injected at deploy time from the GOOGLE_CLIENT_ID repo variable.
+// For local dev, paste your client id below temporarily (see README) — never commit it.
 // Authorized JavaScript origins must include the dev origin (http://localhost:5161)
 // and the deployed origin (https://<user>.github.io). Scope is drive.appdata, so the
 // app can only read/write its own hidden Drive folder — never the user's other files.
