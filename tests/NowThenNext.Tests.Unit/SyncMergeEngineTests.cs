@@ -11,6 +11,7 @@ public class SyncMergeEngineTests
     {
         Id = id,
         Label = label,
+        CreatedAt = Base,
         Base64Data = "data",
         LastModifiedUtc = modified,
         IsDeleted = deleted
@@ -41,19 +42,6 @@ public class SyncMergeEngineTests
         Assert.Equal("remote", result.Merged[0].Label);
         Assert.True(result.LocalChanged);
         Assert.False(result.RemoteChanged);
-    }
-
-    [Fact]
-    public void EqualTimestamps_NoChangeEitherSide()
-    {
-        var local = new List<ImageItem> { Img("1", Base, label: "local") };
-        var remote = new List<ImageItem> { Img("1", Base, label: "remote") };
-
-        var result = SyncMergeEngine.MergeById(local, remote);
-
-        Assert.False(result.LocalChanged);
-        Assert.False(result.RemoteChanged);
-        Assert.Equal("local", result.Merged[0].Label); // local kept on tie
     }
 
     [Fact]
@@ -193,5 +181,74 @@ public class SyncMergeEngineTests
         Assert.Equal(2, result.Merged.Count);
         Assert.True(result.LocalChanged);
         Assert.True(result.RemoteChanged);
+    }
+
+    [Fact]
+    public void EqualTimestamps_DifferentContent_BothDevicesPickTheSameRecord()
+    {
+        var a = new List<ImageItem> { Img("1", Base, label: "apple") };
+        var b = new List<ImageItem> { Img("1", Base, label: "banana") };
+
+        var onA = SyncMergeEngine.MergeById(a, b);
+        var onB = SyncMergeEngine.MergeById(b, a);
+
+        Assert.Equal(onA.Merged[0].Label, onB.Merged[0].Label);
+        // Exactly one side adopts the other's record on each device.
+        Assert.True(onA.LocalChanged ^ onA.RemoteChanged);
+        Assert.True(onB.LocalChanged ^ onB.RemoteChanged);
+    }
+
+    [Fact]
+    public void EqualTimestamps_TombstoneWins()
+    {
+        // Recent, so the tombstone isn't garbage-collected.
+        var recent = DateTime.UtcNow.AddMinutes(-1);
+        var local = new List<ImageItem> { Img("1", recent) };
+        var remote = new List<ImageItem> { Img("1", recent, deleted: true) };
+
+        var result = SyncMergeEngine.MergeById(local, remote);
+
+        Assert.True(result.Merged[0].IsDeleted);
+        Assert.True(result.LocalChanged);
+    }
+
+    [Fact]
+    public void EqualTimestamps_SameContent_NoChange()
+    {
+        var result = SyncMergeEngine.MergeById(
+            new List<ImageItem> { Img("1", Base) },
+            new List<ImageItem> { Img("1", Base) });
+
+        Assert.False(result.LocalChanged);
+        Assert.False(result.RemoteChanged);
+    }
+
+    [Fact]
+    public void EqualTimestamps_CategoryCreatedAtDiffers_IsAChange()
+    {
+        var local = new List<LearningCategory> { new() { Id = "c", Name = "n", CreatedAt = Base, LastModifiedUtc = Base } };
+        var remote = new List<LearningCategory> { new() { Id = "c", Name = "n", CreatedAt = Base.AddDays(1), LastModifiedUtc = Base } };
+
+        var result = SyncMergeEngine.MergeById(local, remote);
+
+        Assert.True(result.LocalChanged || result.RemoteChanged);
+    }
+
+    [Fact]
+    public void Phonics_EqualTimestamps_CompletionWins()
+    {
+        var local = new Dictionary<string, PhonicsCardProgress>
+        {
+            ["p2-w1-s"] = new() { Completed = false, LastModifiedUtc = Base }
+        };
+        var remote = new Dictionary<string, PhonicsCardProgress>
+        {
+            ["p2-w1-s"] = new() { Completed = true, LastModifiedUtc = Base }
+        };
+
+        var result = SyncMergeEngine.MergePhonics(local, remote);
+
+        Assert.True(result.Merged["p2-w1-s"].Completed);
+        Assert.True(result.LocalChanged);
     }
 }

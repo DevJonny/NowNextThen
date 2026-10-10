@@ -24,27 +24,21 @@
         if (resp.status === 401) {
             window.googleAuth.invalidateToken();
         }
-        // 412 (etag mismatch) and 304 are handled by callers, not treated as fatal here.
-        if (!resp.ok && resp.status !== 412 && resp.status !== 304) {
+        if (!resp.ok) {
             throw driveError(resp.status, resp.status + " " + resp.statusText);
         }
         return resp;
     }
 
-    // Returns every sync file, oldest first. Two devices syncing for the first time at once
-    // can each create one; SyncService merges them all into the oldest (so every device picks
-    // the same one) and deletes the rest. Only the oldest gets an ETag, as it's the one updated.
+    // Returns every sync file, oldest first, with its Drive `version`. Two devices syncing for
+    // the first time at once can each create one; SyncService merges them all into the oldest
+    // (so every device picks the same one) and deletes the rest.
     async function findSyncFiles() {
         const q = encodeURIComponent("name='" + FILE_NAME + "' and trashed=false");
-        const url = API + "/files?spaces=appDataFolder&q=" + q + "&orderBy=createdTime&fields=files(id)";
+        const url = API + "/files?spaces=appDataFolder&q=" + q + "&orderBy=createdTime&fields=files(id,version)";
         const resp = await authedFetch(url);
         const data = await resp.json();
-        const files = (data.files || []).map(f => ({ id: f.id, etag: null }));
-        if (files.length === 0) return files;
-        // Drive doesn't support HEAD here; GET the metadata to read the ETag header.
-        const meta = await authedFetch(API + "/files/" + files[0].id + "?fields=id");
-        files[0].etag = meta.headers.get("ETag");
-        return files;
+        return (data.files || []).map(f => ({ id: f.id, version: f.version || null }));
     }
 
     async function deleteSyncFile(fileId) {
@@ -61,45 +55,47 @@
         return await resp.text();
     }
 
-    async function uploadSyncFile(envelopeJson, existingId, existingEtag) {
-        if (existingId) return await updateFile(existingId, existingEtag, envelopeJson);
-        return await createFile(envelopeJson);
+    // Drive v3 has no compare-and-swap on update, so check the file's `version` (which
+    // increments on every change) just before writing. A mismatch means another device
+    // wrote since we downloaded; report 412 so SyncService re-downloads and merges again.
+    // This narrows the race to one round trip rather than closing it; anything lost in
+    // that window is still on the other device and re-uploads on its next sync.
+    async function uploadSyncFile(envelopeJson, existingId, expectedVersion) {
+        if (!existingId) return await uploadResumable(UPLOAD + "/files?uploadType=resumable&fields=id,version",
+            "POST", { name: FILE_NAME, parents: ["appDataFolder"] }, envelopeJson);
+
+        if (expectedVersion) {
+            const meta = await authedFetch(API + "/files/" + existingId + "?fields=version");
+            const current = (await meta.json()).version;
+            if (current !== expectedVersion) {
+                throw driveError(412, "Sync file changed on another device");
+            }
+        }
+        return await uploadResumable(UPLOAD + "/files/" + existingId + "?uploadType=resumable&fields=id,version",
+            "PATCH", {}, envelopeJson);
     }
 
-    async function createFile(body) {
-        const boundary = "b" + Math.random().toString(36).slice(2);
-        const metadata = JSON.stringify({ name: FILE_NAME, parents: ["appDataFolder"] });
-        const multipart =
-            "--" + boundary + "\r\n" +
-            "Content-Type: application/json; charset=UTF-8\r\n\r\n" +
-            metadata + "\r\n" +
-            "--" + boundary + "\r\n" +
-            "Content-Type: application/json; charset=UTF-8\r\n\r\n" +
-            body + "\r\n" +
-            "--" + boundary + "--";
-
-        const resp = await authedFetch(UPLOAD + "/files?uploadType=multipart&fields=id", {
-            method: "POST",
-            headers: { "Content-Type": "multipart/related; boundary=" + boundary },
-            body: multipart
+    // Resumable upload: simple/multipart uploads are only documented up to 5 MB, and the
+    // envelope carries every image.
+    async function uploadResumable(sessionUrl, method, metadata, body) {
+        const session = await authedFetch(sessionUrl, {
+            method: method,
+            headers: {
+                "Content-Type": "application/json; charset=UTF-8",
+                "X-Upload-Content-Type": "application/json"
+            },
+            body: JSON.stringify(metadata)
         });
-        const data = await resp.json();
-        return { id: data.id, etag: resp.headers.get("ETag") };
-    }
+        const location = session.headers.get("Location");
+        if (!location) throw driveError(500, "Drive did not return an upload session");
 
-    async function updateFile(id, etag, body) {
-        const headers = { "Content-Type": "application/json" };
-        if (etag) headers["If-Match"] = etag;
-        const resp = await authedFetch(UPLOAD + "/files/" + id + "?uploadType=media&fields=id", {
-            method: "PATCH",
-            headers: headers,
+        const resp = await authedFetch(location, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
             body: body
         });
-        if (resp.status === 412) {
-            throw driveError(412, "Precondition failed (etag mismatch)");
-        }
         const data = await resp.json();
-        return { id: data.id, etag: resp.headers.get("ETag") };
+        return { id: data.id, version: data.version || null };
     }
 
     window.driveSync = {

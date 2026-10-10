@@ -32,7 +32,12 @@
             s.async = true;
             s.defer = true;
             s.onload = () => resolve();
-            s.onerror = () => reject(new Error("Failed to load Google Identity Services"));
+            s.onerror = () => {
+                // Forget the failure so a later Sign in / Reconnect tap can try again.
+                scriptPromise = null;
+                s.remove();
+                reject(new Error("Failed to load Google Identity Services"));
+            };
             document.head.appendChild(s);
         });
         return scriptPromise;

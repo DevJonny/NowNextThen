@@ -79,7 +79,10 @@ public static class SyncMergeEngine
             {
                 if (l.LastModifiedUtc > r.LastModifiedUtc) { merged[key] = l; remoteChanged = true; }
                 else if (r.LastModifiedUtc > l.LastModifiedUtc) { merged[key] = r; localChanged = true; }
-                else merged[key] = l;
+                // Tie: completion wins, so every device makes the same choice.
+                else if (l.Completed == r.Completed) merged[key] = l;
+                else if (l.Completed) { merged[key] = l; remoteChanged = true; }
+                else { merged[key] = r; localChanged = true; }
             }
             else if (l != null) { merged[key] = l; remoteChanged = true; }
             else { merged[key] = r!; localChanged = true; }
@@ -95,6 +98,11 @@ public static class SyncMergeEngine
         {
             if (local.LastModifiedUtc > remote.LastModifiedUtc) return (local, false, true);
             if (remote.LastModifiedUtc > local.LastModifiedUtc) return (remote, true, false);
+
+            // Equal timestamps: break the tie on content so every device picks the same record.
+            var tie = SyncContent.Compare(local, remote);
+            if (tie > 0) return (local, false, true);
+            if (tie < 0) return (remote, true, false);
             return (local, false, false);
         }
 

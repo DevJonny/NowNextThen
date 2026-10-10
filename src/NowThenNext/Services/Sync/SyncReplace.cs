@@ -12,7 +12,7 @@ public static class SyncReplace
     /// New or changed records are stamped with <paramref name="now"/> so they win the next
     /// merge; unchanged ones keep their timestamp so they don't override newer remote edits.
     /// </summary>
-    public static List<T> ReplaceAll<T>(List<T> stored, List<T> incoming, DateTime now, Func<T, T, bool> sameContent)
+    public static List<T> ReplaceAll<T>(List<T> stored, List<T> incoming, DateTime now)
         where T : ISyncEntity
     {
         var storedById = stored.ToDictionary(e => e.Id);
@@ -22,7 +22,7 @@ public static class SyncReplace
         {
             if (entity.LastModifiedUtc == default
                 || !storedById.TryGetValue(entity.Id, out var existing)
-                || !sameContent(existing, entity))
+                || !SyncContent.Same(existing, entity))
             {
                 entity.LastModifiedUtc = now;
             }

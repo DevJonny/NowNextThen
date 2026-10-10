@@ -200,9 +200,22 @@ public class LearningCardsDataService : ILearningCardsDataService
         }
     }
 
+    /// <summary>
+    /// Live custom data as JSON for backup and merge restore. Tombstones are left out, so a
+    /// backup record can revive one locally deleted (restore stamps it as a fresh edit).
+    /// </summary>
     public async Task<string?> GetRawCustomDataJsonAsync()
     {
-        return await _jsRuntime.InvokeAsync<string?>("indexedDb.getItem", StoreName);
+        var json = await _jsRuntime.InvokeAsync<string?>("indexedDb.getItem", StoreName);
+        if (string.IsNullOrEmpty(json))
+            return json;
+
+        var data = await GetCustomDataAsync();
+        return JsonSerializer.Serialize(new LearningCardsSnapshot
+        {
+            Categories = data.Categories.Where(c => !c.IsDeleted).ToList(),
+            Cards = data.Cards.Where(c => !c.IsDeleted).ToList()
+        });
     }
 
     public async Task SetRawCustomDataJsonAsync(string json)
@@ -227,19 +240,12 @@ public class LearningCardsDataService : ILearningCardsDataService
         var stored = await GetCustomDataAsync();
         var now = DateTime.UtcNow;
 
-        var categories = SyncReplace.ReplaceAll(stored.Categories, incoming.Categories, now, SameContent);
-        var cards = SyncReplace.ReplaceAll(stored.Cards, incoming.Cards, now, SameContent);
+        var categories = SyncReplace.ReplaceAll(stored.Categories, incoming.Categories, now);
+        var cards = SyncReplace.ReplaceAll(stored.Cards, incoming.Cards, now);
 
         await SaveCustomDataAsync(new LearningCardsSnapshot { Categories = categories, Cards = cards });
         RaiseDataChanged();
     }
-
-    private static bool SameContent(LearningCategory a, LearningCategory b) =>
-        a.IsDeleted == b.IsDeleted && a.Name == b.Name && a.Emoji == b.Emoji;
-
-    private static bool SameContent(LearningCard a, LearningCard b) =>
-        a.IsDeleted == b.IsDeleted && a.CategoryId == b.CategoryId
-        && a.Word == b.Word && a.ImageData == b.ImageData;
 
     public async Task<LearningCardsSnapshot> GetSyncSnapshotAsync()
     {
@@ -251,4 +257,5 @@ public class LearningCardsDataService : ILearningCardsDataService
         // Result of a sync pull — must not raise DataChanged.
         await SaveCustomDataAsync(snapshot);
     }
+
 }
