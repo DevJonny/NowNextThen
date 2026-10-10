@@ -23,6 +23,6 @@ public class ImageItem : ISyncEntity
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     // Sync metadata (see ISyncEntity)
-    public DateTime LastModifiedUtc { get; set; } = DateTime.UtcNow;
+    public DateTime LastModifiedUtc { get; set; }
     public bool IsDeleted { get; set; }
 }

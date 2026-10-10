@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.JSInterop;
 using NowThenNext.Models;
+using NowThenNext.Services.Sync;
 
 namespace NowThenNext.Services;
 
@@ -141,16 +142,11 @@ public class LearningCardsDataService : ILearningCardsDataService
 
             var data = JsonSerializer.Deserialize<LearningCardsSnapshot>(json) ?? new LearningCardsSnapshot();
 
-            // Normalize missing sync metadata for records saved before sync existed.
-            foreach (var category in data.Categories)
+            // Persist the one-time migration (no DataChanged) so legacy timestamps stay stable.
+            if (NormalizeTimestamps(data, DateTime.UtcNow))
             {
-                if (category.LastModifiedUtc == default)
-                    category.LastModifiedUtc = category.CreatedAt != default ? category.CreatedAt : DateTime.UtcNow;
-            }
-            foreach (var card in data.Cards)
-            {
-                if (card.LastModifiedUtc == default)
-                    card.LastModifiedUtc = DateTime.UtcNow;
+                try { await SaveCustomDataAsync(data); }
+                catch (Exception ex) { Console.Error.WriteLine($"Failed to persist learning cards migration: {ex.Message}"); }
             }
 
             return data;
@@ -161,8 +157,32 @@ public class LearningCardsDataService : ILearningCardsDataService
         }
     }
 
+    /// <summary>
+    /// Fills missing sync timestamps on records saved before sync existed. Categories use
+    /// <c>CreatedAt</c>; cards have none, so they use <paramref name="fallback"/>.
+    /// </summary>
+    private static bool NormalizeTimestamps(LearningCardsSnapshot data, DateTime fallback)
+    {
+        var changed = false;
+        foreach (var category in data.Categories.Where(c => c.LastModifiedUtc == default))
+        {
+            category.LastModifiedUtc = category.CreatedAt != default ? category.CreatedAt : fallback;
+            changed = true;
+        }
+        foreach (var card in data.Cards.Where(c => c.LastModifiedUtc == default))
+        {
+            card.LastModifiedUtc = fallback;
+            changed = true;
+        }
+        return changed;
+    }
+
     private async Task SaveCustomDataAsync(LearningCardsSnapshot data)
     {
+        // A tombstone only needs Id, timestamp and IsDeleted to merge correctly.
+        foreach (var card in data.Cards.Where(c => c.IsDeleted))
+            card.ImageData = string.Empty;
+
         var json = JsonSerializer.Serialize(data);
         try
         {
@@ -187,15 +207,39 @@ public class LearningCardsDataService : ILearningCardsDataService
 
     public async Task SetRawCustomDataJsonAsync(string json)
     {
-        await _jsRuntime.InvokeVoidAsync("indexedDb.setItem", StoreName, json);
-        RaiseDataChanged();
+        var incoming = JsonSerializer.Deserialize<LearningCardsSnapshot>(json) ?? new LearningCardsSnapshot();
+        await ReplaceCustomDataAsync(incoming);
     }
 
     public async Task ClearCustomDataAsync()
     {
-        await _jsRuntime.InvokeVoidAsync("indexedDb.removeItem", StoreName);
+        // Tombstone rather than remove, so the clear propagates on sync.
+        await ReplaceCustomDataAsync(new LearningCardsSnapshot());
+    }
+
+    /// <summary>
+    /// Makes <paramref name="incoming"/> the complete set of live custom data. Changed records
+    /// are stamped now; stored records it omits become tombstones, so a restore isn't undone
+    /// by the next sync.
+    /// </summary>
+    private async Task ReplaceCustomDataAsync(LearningCardsSnapshot incoming)
+    {
+        var stored = await GetCustomDataAsync();
+        var now = DateTime.UtcNow;
+
+        var categories = SyncReplace.ReplaceAll(stored.Categories, incoming.Categories, now, SameContent);
+        var cards = SyncReplace.ReplaceAll(stored.Cards, incoming.Cards, now, SameContent);
+
+        await SaveCustomDataAsync(new LearningCardsSnapshot { Categories = categories, Cards = cards });
         RaiseDataChanged();
     }
+
+    private static bool SameContent(LearningCategory a, LearningCategory b) =>
+        a.IsDeleted == b.IsDeleted && a.Name == b.Name && a.Emoji == b.Emoji;
+
+    private static bool SameContent(LearningCard a, LearningCard b) =>
+        a.IsDeleted == b.IsDeleted && a.CategoryId == b.CategoryId
+        && a.Word == b.Word && a.ImageData == b.ImageData;
 
     public async Task<LearningCardsSnapshot> GetSyncSnapshotAsync()
     {

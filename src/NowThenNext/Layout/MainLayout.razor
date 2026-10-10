@@ -14,7 +14,7 @@
     {
         if (firstRender)
         {
-            // Kick off silent re-auth + initial sync once JS (GIS + Drive) is available.
+            // Restore any still-valid Drive session and run the initial sync once JS is available.
             await Sync.InitializeAsync();
         }
     }

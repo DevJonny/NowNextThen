@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.JSInterop;
 using NowThenNext.Models;
+using NowThenNext.Services.Sync;
 
 namespace NowThenNext.Services;
 
@@ -74,7 +75,7 @@ public class LocalStorageImageService : IImageStorageService
 
         image.IsDeleted = true;
         image.LastModifiedUtc = DateTime.UtcNow;
-        await SaveAllImagesAsync(images);
+        await SaveAllImagesAsync(images); // strips the tombstone's image payload
         RaiseDataChanged();
     }
 
@@ -121,12 +122,19 @@ public class LocalStorageImageService : IImageStorageService
             }
 
             var list = JsonSerializer.Deserialize<List<ImageItem>>(json) ?? new List<ImageItem>();
-            foreach (var item in list)
+            var migrated = false;
+            foreach (var item in list.Where(i => i.LastModifiedUtc == default))
             {
-                if (item.LastModifiedUtc == default)
-                {
-                    item.LastModifiedUtc = item.CreatedAt != default ? item.CreatedAt : DateTime.UtcNow;
-                }
+                item.LastModifiedUtc = item.CreatedAt != default ? item.CreatedAt : DateTime.UtcNow;
+                migrated = true;
+            }
+
+            // Persist the one-time migration so the timestamp stays stable across reads.
+            // Not a user edit, so no DataChanged.
+            if (migrated)
+            {
+                try { await SaveAllImagesAsync(list); }
+                catch (Exception ex) { Console.Error.WriteLine($"Failed to persist image migration: {ex.Message}"); }
             }
             return list;
         }
@@ -138,6 +146,12 @@ public class LocalStorageImageService : IImageStorageService
 
     private async Task SaveAllImagesAsync(List<ImageItem> images)
     {
+        // A tombstone only needs Id, timestamp and IsDeleted to merge correctly.
+        foreach (var image in images.Where(i => i.IsDeleted))
+        {
+            image.Base64Data = string.Empty;
+        }
+
         var json = JsonSerializer.Serialize(images);
         try
         {
@@ -195,15 +209,25 @@ public class LocalStorageImageService : IImageStorageService
 
     public async Task ClearAllImagesAsync()
     {
-        await _jsRuntime.InvokeVoidAsync("indexedDb.removeItem", StoreName);
-        RaiseDataChanged();
+        // Tombstone rather than remove, so the clear propagates on sync.
+        await SaveImagesAsync(new List<ImageItem>());
     }
 
     public async Task SaveImagesAsync(List<ImageItem> images)
     {
-        await SaveAllImagesAsync(images);
+        var stored = await GetRawImagesAsync();
+        var result = SyncReplace.ReplaceAll(stored, images, DateTime.UtcNow, SameContent);
+
+        await SaveAllImagesAsync(result);
         RaiseDataChanged();
     }
+
+    private static bool SameContent(ImageItem a, ImageItem b) =>
+        a.IsDeleted == b.IsDeleted
+        && a.Base64Data == b.Base64Data
+        && a.Label == b.Label
+        && a.Category == b.Category
+        && a.IsFavorite == b.IsFavorite;
 
     public async Task<List<ImageItem>> GetSyncSnapshotAsync()
     {

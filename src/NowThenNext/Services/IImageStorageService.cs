@@ -59,12 +59,13 @@ public interface IImageStorageService
     Task<StorageInfo> GetStorageInfoAsync();
 
     /// <summary>
-    /// Clear all images from storage
+    /// Clear all images from storage (as tombstones, so the clear propagates on sync)
     /// </summary>
     Task ClearAllImagesAsync();
 
     /// <summary>
-    /// Save multiple images to storage (used for restore operations)
+    /// Make these the complete set of live images (used for restore operations).
+    /// Stored images not in the list become tombstones.
     /// </summary>
     Task SaveImagesAsync(List<ImageItem> images);
 

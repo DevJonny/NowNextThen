@@ -8,6 +8,12 @@ public enum SyncStatus
     /// <summary>No Drive session; nothing syncs until the user signs in.</summary>
     NotSignedIn,
 
+    /// <summary>
+    /// Previously connected, but the access token has expired. Google needs a user
+    /// gesture to issue a new one, so sync waits until the user taps Reconnect.
+    /// </summary>
+    NeedsReconnect,
+
     /// <summary>Signed in and up to date-ish; a sync may be scheduled.</summary>
     Idle,
 

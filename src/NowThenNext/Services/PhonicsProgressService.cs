@@ -83,9 +83,16 @@ public class PhonicsProgressService : IPhonicsProgressService
 
     public async Task ResetAllAsync()
     {
+        // Cover every known card, not just keys seen here, so progress completed only on
+        // another device is reset too when this tombstone map merges.
+        var allIds = _phonicsData.GetAllPhases()
+            .SelectMany(p => p.Weeks)
+            .SelectMany(w => w.Cards)
+            .Select(c => c.Id);
+
         var data = await GetDataAsync();
         var now = DateTime.UtcNow;
-        foreach (var key in data.Keys.ToList())
+        foreach (var key in data.Keys.Concat(allIds).Distinct().ToList())
         {
             data[key] = new PhonicsCardProgress { Completed = false, LastModifiedUtc = now };
         }
@@ -125,9 +132,14 @@ public class PhonicsProgressService : IPhonicsProgressService
                 // Legacy: HashSet<string> of completed card ids.
                 var oldSet = JsonSerializer.Deserialize<HashSet<string>>(json) ?? new HashSet<string>();
                 var now = DateTime.UtcNow;
-                return oldSet.ToDictionary(
+                var migrated = oldSet.ToDictionary(
                     id => id,
                     _ => new PhonicsCardProgress { Completed = true, LastModifiedUtc = now });
+
+                // Persist once (no DataChanged) so the timestamp doesn't move on every read.
+                try { await SaveDataAsync(migrated); }
+                catch (Exception ex) { Console.Error.WriteLine($"Failed to persist phonics migration: {ex.Message}"); }
+                return migrated;
             }
 
             return JsonSerializer.Deserialize<Dictionary<string, PhonicsCardProgress>>(json)

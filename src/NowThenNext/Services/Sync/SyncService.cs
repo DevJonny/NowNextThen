@@ -27,6 +27,7 @@ public partial class SyncService
     private static readonly JsonSerializerOptions EnvelopeJson = new(JsonSerializerOptions.Default);
 
     private bool _inFlight;
+    private bool _syncRequestedWhileInFlight;
     private bool _initialized;
     private CancellationTokenSource? _debounceCts;
 
@@ -61,8 +62,8 @@ public partial class SyncService
     }
 
     /// <summary>
-    /// Called once after first render. Silently re-authenticates if a previous
-    /// session exists, then does an initial sync.
+    /// Called once after first render. Restores a still-valid token from this browser
+    /// session (no popup) and does an initial sync; otherwise asks the user to reconnect.
     /// </summary>
     public async Task InitializeAsync()
     {
@@ -78,12 +79,15 @@ public partial class SyncService
                 return;
             }
 
-            var token = await _js.InvokeAsync<string?>("googleAuth.trySilentSignIn");
-            SetStatus(SyncStatus.Idle);
-            if (!string.IsNullOrEmpty(token))
+            var token = await _js.InvokeAsync<string?>("googleAuth.restoreSession");
+            if (string.IsNullOrEmpty(token))
             {
-                await SyncNowAsync();
+                SetStatus(SyncStatus.NeedsReconnect);
+                return;
             }
+
+            SetStatus(SyncStatus.Idle);
+            await SyncNowAsync();
         }
         catch
         {
@@ -91,6 +95,7 @@ public partial class SyncService
         }
     }
 
+    /// <summary>Opens Google's sign-in popup. Must be called from a user gesture (a click).</summary>
     public async Task<bool> SignInAsync()
     {
         try
@@ -121,7 +126,7 @@ public partial class SyncService
     /// <summary>Debounced sync after a local change.</summary>
     public void ScheduleSync()
     {
-        if (Status == SyncStatus.NotSignedIn) return;
+        if (Status is SyncStatus.NotSignedIn or SyncStatus.NeedsReconnect) return;
 
         _debounceCts?.Cancel();
         var cts = new CancellationTokenSource();
@@ -139,25 +144,20 @@ public partial class SyncService
 
     public async Task SyncNowAsync()
     {
-        if (_inFlight) return;
+        if (_inFlight)
+        {
+            // A change landed mid-sync and may have missed the snapshot; run again afterwards.
+            _syncRequestedWhileInFlight = true;
+            return;
+        }
         _debounceCts?.Cancel();
 
+        // Never open the sign-in popup here: this also runs from timers, which aren't user gestures.
         var signedIn = await _js.InvokeAsync<bool>("googleAuth.isSignedIn");
         if (!signedIn)
         {
-            var hasPrevious = await _js.InvokeAsync<bool>("googleAuth.hasPreviousSession");
-            if (!hasPrevious)
-            {
-                SetStatus(SyncStatus.NotSignedIn);
-                return;
-            }
-
-            var token = await _js.InvokeAsync<string?>("googleAuth.signIn");
-            if (string.IsNullOrEmpty(token))
-            {
-                SetStatus(SyncStatus.NotSignedIn);
-                return;
-            }
+            SetStatus(await SignedOutStatusAsync());
+            return;
         }
 
         _inFlight = true;
@@ -175,7 +175,7 @@ public partial class SyncService
             var status = ParseDriveStatus(jsex.Message);
             if (status == 401)
             {
-                SetStatus(SyncStatus.NotSignedIn);
+                SetStatus(await SignedOutStatusAsync());
             }
             else if (IsNetworkError(jsex.Message))
             {
@@ -196,7 +196,18 @@ public partial class SyncService
         finally
         {
             _inFlight = false;
+            if (_syncRequestedWhileInFlight)
+            {
+                _syncRequestedWhileInFlight = false;
+                ScheduleSync();
+            }
         }
+    }
+
+    private async Task<SyncStatus> SignedOutStatusAsync()
+    {
+        var hasPrevious = await _js.InvokeAsync<bool>("googleAuth.hasPreviousSession");
+        return hasPrevious ? SyncStatus.NeedsReconnect : SyncStatus.NotSignedIn;
     }
 
     private async Task RunWithRetryAsync()
@@ -214,28 +225,28 @@ public partial class SyncService
                 if (status == 412 && attempt < MaxRetries - 1)
                     continue; // etag conflict — re-download and merge again
 
-                if (status == 401 && attempt < MaxRetries - 1)
-                {
-                    var token = await _js.InvokeAsync<string?>("googleAuth.signIn");
-                    if (string.IsNullOrEmpty(token)) throw;
-                    continue;
-                }
-
-                throw;
+                throw; // 401 can't be retried without a user gesture; SyncNowAsync asks to reconnect.
             }
         }
     }
 
     private async Task PerformSyncAsync()
     {
-        var existing = await _js.InvokeAsync<DriveFileHandle?>("driveSync.findSyncFile");
+        // Oldest first. Extra files come from devices whose first syncs raced; fold them
+        // all into the oldest so every device converges on the same file.
+        var files = await _js.InvokeAsync<List<DriveFileHandle>>("driveSync.findSyncFiles");
+        var existing = files.FirstOrDefault();
+        var duplicates = files.Skip(1).ToList();
 
         SyncEnvelope? remote = null;
-        if (existing != null)
+        foreach (var file in files)
         {
-            var remoteJson = await _js.InvokeAsync<string?>("driveSync.downloadSyncFile", existing.Id);
-            if (!string.IsNullOrEmpty(remoteJson))
-                remote = JsonSerializer.Deserialize<SyncEnvelope>(remoteJson, EnvelopeJson);
+            var remoteJson = await _js.InvokeAsync<string?>("driveSync.downloadSyncFile", file.Id);
+            if (string.IsNullOrEmpty(remoteJson)) continue;
+
+            var envelope = JsonSerializer.Deserialize<SyncEnvelope>(remoteJson, EnvelopeJson);
+            if (envelope != null)
+                remote = remote == null ? envelope : MergeEnvelopes(remote, envelope);
         }
 
         var localImages = await _images.GetSyncSnapshotAsync();
@@ -270,7 +281,7 @@ public partial class SyncService
             await _phonics.ApplyMergedAsync(phonicsMerge.Merged);
         }
 
-        if (remoteChanged || existing == null)
+        if (remoteChanged || existing == null || duplicates.Count > 0)
         {
             var envelope = new SyncEnvelope
             {
@@ -284,7 +295,27 @@ public partial class SyncService
             var envelopeJson = JsonSerializer.Serialize(envelope, EnvelopeJson);
             await _js.InvokeVoidAsync("driveSync.uploadSyncFile", envelopeJson, existing?.Id, existing?.Etag);
         }
+
+        // Only after the merged data is safely in the oldest file.
+        foreach (var duplicate in duplicates)
+            await _js.InvokeVoidAsync("driveSync.deleteSyncFile", duplicate.Id);
     }
+
+    private static SyncEnvelope MergeEnvelopes(SyncEnvelope a, SyncEnvelope b) => new()
+    {
+        Version = Math.Max(a.Version, b.Version),
+        LastSyncedUtc = a.LastSyncedUtc > b.LastSyncedUtc ? a.LastSyncedUtc : b.LastSyncedUtc,
+        Images = SyncMergeEngine.MergeById(a.Images ?? new(), b.Images ?? new()).Merged,
+        LearningCards = new LearningCardsSnapshot
+        {
+            Categories = SyncMergeEngine.MergeById(
+                a.LearningCards?.Categories ?? new(), b.LearningCards?.Categories ?? new()).Merged,
+            Cards = SyncMergeEngine.MergeById(
+                a.LearningCards?.Cards ?? new(), b.LearningCards?.Cards ?? new()).Merged
+        },
+        PhonicsProgress = SyncMergeEngine.MergePhonics(
+            a.PhonicsProgress ?? new(), b.PhonicsProgress ?? new()).Merged
+    };
 
     /// <summary>Parses the numeric status out of a <c>DRIVE_ERROR:{status}:...</c> message, else -1.</summary>
     private static int ParseDriveStatus(string message)

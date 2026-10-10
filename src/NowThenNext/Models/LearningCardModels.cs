@@ -12,7 +12,7 @@ public class LearningCategory : ISyncEntity
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     // Sync metadata (see ISyncEntity)
-    public DateTime LastModifiedUtc { get; set; } = DateTime.UtcNow;
+    public DateTime LastModifiedUtc { get; set; }
     public bool IsDeleted { get; set; }
 }
 
@@ -28,7 +28,7 @@ public class LearningCard : ISyncEntity
     public bool IsBuiltIn { get; set; }
 
     // Sync metadata (see ISyncEntity)
-    public DateTime LastModifiedUtc { get; set; } = DateTime.UtcNow;
+    public DateTime LastModifiedUtc { get; set; }
     public bool IsDeleted { get; set; }
 }
 

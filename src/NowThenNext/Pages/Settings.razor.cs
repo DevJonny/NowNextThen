@@ -55,6 +55,7 @@ public partial class Settings : IDisposable
         SyncStatus.Syncing => "syncing",
         SyncStatus.Error => "error",
         SyncStatus.Idle => "idle",
+        SyncStatus.NeedsReconnect => "reconnect",
         _ => "signed-out"
     };
 
@@ -64,6 +65,7 @@ public partial class Settings : IDisposable
         SyncStatus.Syncing => "Syncing…",
         SyncStatus.Error => "Sync error",
         SyncStatus.Idle => "Connected",
+        SyncStatus.NeedsReconnect => "Needs reconnecting",
         _ => "Not signed in"
     };
 
@@ -297,10 +299,7 @@ public partial class Settings : IDisposable
             IsRestoring = true;
             StateHasChanged();
 
-            // Clear all existing images
-            await ImageStorage.ClearAllImagesAsync();
-
-            // Save all images from backup
+            // Replace all images with the backup (omitted images become sync tombstones)
             await ImageStorage.SaveImagesAsync(PendingRestoreImages);
 
             // Restore learning cards data (replace)

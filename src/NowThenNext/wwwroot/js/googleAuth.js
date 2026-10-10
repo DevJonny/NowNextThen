@@ -10,9 +10,15 @@
     const CLIENT_ID = "REPLACE_WITH_YOUR_CLIENT_ID.apps.googleusercontent.com";
     const SCOPE = "https://www.googleapis.com/auth/drive.appdata";
     const PERSISTED_FLAG = "google-auth-connected";
+    // The access token (1h lifetime) is kept in sessionStorage so a page reload doesn't
+    // force a reconnect. GIS has no silent refresh without a user gesture, so once it
+    // expires the user must reconnect (SyncStatus.NeedsReconnect).
+    const TOKEN_KEY = "google-auth-token";
+    const EXPIRY_MARGIN_MS = 60 * 1000;
 
     let tokenClient = null;
     let accessToken = null;
+    let tokenExpiresAt = 0;
     let pending = null;
     let scriptPromise = null;
     let initialized = false;
@@ -44,7 +50,23 @@
         initialized = true;
     }
 
-    // prompt: undefined = default (may show consent), "" = silent, "consent" = force consent
+    function setToken(token, expiresInSeconds) {
+        accessToken = token;
+        tokenExpiresAt = token ? Date.now() + (expiresInSeconds || 3600) * 1000 : 0;
+        try {
+            if (token) sessionStorage.setItem(TOKEN_KEY, JSON.stringify({ token, expiresAt: tokenExpiresAt }));
+            else sessionStorage.removeItem(TOKEN_KEY);
+        } catch { /* storage unavailable; in-memory only */ }
+    }
+
+    function validToken() {
+        if (accessToken && Date.now() < tokenExpiresAt - EXPIRY_MARGIN_MS) return accessToken;
+        if (accessToken) setToken(null);
+        return null;
+    }
+
+    // Must be called from a user gesture: GIS opens a popup for every token request.
+    // prompt: undefined = default (may show consent), "consent" = force consent
     function requestToken(prompt) {
         if (pending) return pending;
         pending = new Promise((resolve, reject) => {
@@ -55,17 +77,17 @@
             tokenClient.callback = (resp) => {
                 pending = null;
                 if (resp.error) {
-                    if (prompt === "") resolve(null);
-                    else reject(new Error(resp.error));
+                    reject(new Error(resp.error));
                     return;
                 }
-                accessToken = resp.access_token || null;
+                setToken(resp.access_token || null, Number(resp.expires_in));
                 if (accessToken) localStorage.setItem(PERSISTED_FLAG, "true");
                 resolve(accessToken);
             };
             tokenClient.error_callback = (err) => {
                 pending = null;
-                if (prompt === "") resolve(null);
+                // Popup closed/blocked by the user — not an error worth surfacing.
+                if (err && (err.type === "popup_closed" || err.type === "popup_failed_to_open")) resolve(null);
                 else reject(new Error((err && err.message) || "Sign-in failed"));
             };
             tokenClient.requestAccessToken(prompt !== undefined ? { prompt } : undefined);
@@ -78,29 +100,38 @@
             await ensureInitialized();
             return requestToken(undefined);
         },
-        trySilentSignIn: async function () {
-            await ensureInitialized();
-            return requestToken("");
+        // Restores a still-valid token from this browser session without any popup, and
+        // preloads GIS so a later Reconnect click opens its popup within the user gesture.
+        restoreSession: function () {
+            ensureInitialized().catch(() => { /* offline or blocked; sign-in will retry */ });
+            try {
+                const saved = JSON.parse(sessionStorage.getItem(TOKEN_KEY) || "null");
+                if (saved && saved.token) {
+                    accessToken = saved.token;
+                    tokenExpiresAt = saved.expiresAt || 0;
+                }
+            } catch { /* ignore corrupt entry */ }
+            return validToken();
         },
         signOut: function () {
             if (accessToken && window.google && window.google.accounts) {
                 window.google.accounts.oauth2.revoke(accessToken);
             }
-            accessToken = null;
+            setToken(null);
             localStorage.removeItem(PERSISTED_FLAG);
         },
         getAccessToken: function () {
-            return accessToken;
+            return validToken();
         },
         isSignedIn: function () {
-            return accessToken !== null;
+            return validToken() !== null;
         },
         hasPreviousSession: function () {
             return localStorage.getItem(PERSISTED_FLAG) === "true";
         },
         // Drop the in-memory token (e.g. on 401) without revoking — forces a fresh request.
         invalidateToken: function () {
-            accessToken = null;
+            setToken(null);
         }
     };
 })();

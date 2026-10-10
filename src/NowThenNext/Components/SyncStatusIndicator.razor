@@ -21,6 +21,7 @@
         SyncStatus.Syncing => "is-syncing",
         SyncStatus.Error => "is-error",
         SyncStatus.Idle => "is-idle",
+        SyncStatus.NeedsReconnect => "is-error",
         _ => "is-signed-out"
     };
 
@@ -30,6 +31,7 @@
         SyncStatus.Syncing => "Syncing to Google Drive…",
         SyncStatus.Error => "Sync error — open Settings",
         SyncStatus.Idle => "Cloud sync ready",
+        SyncStatus.NeedsReconnect => "Cloud sync paused — reconnect via Settings",
         _ => "Cloud sync — sign in via Settings"
     };
 }
