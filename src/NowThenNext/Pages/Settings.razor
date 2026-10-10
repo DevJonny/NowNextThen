@@ -111,6 +111,86 @@
             </div>
         </div>
 
+        <!-- Cloud Sync -->
+        <div class="settings-container" style="margin-top: 1.5rem;">
+            <div class="settings-icon-container">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 text-calm-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 001-9.9A5.002 5.002 0 007 8a4.002 4.002 0 00-3.9 3.06A3.5 3.5 0 003 15z" />
+                </svg>
+            </div>
+
+            <h2 class="text-xl font-semibold text-calm-text mb-2">Cloud Sync</h2>
+            <p class="text-calm-text-light text-center mb-6">
+                Keep your images, learning cards, and phonics progress in sync across devices with Google Drive.
+            </p>
+
+            <!-- Status line -->
+            <div class="sync-status-line">
+                <span class="sync-status-badge sync-@SyncStatusSlug">
+                    <span class="sync-status-dot"></span>
+                    @SyncStatusLabel
+                </span>
+                @if (Sync.LastSyncedUtc.HasValue)
+                {
+                    <span class="sync-last-synced">Last synced @Sync.LastSyncedUtc.Value.ToLocalTime().ToString("HH:mm")</span>
+                }
+            </div>
+
+            @if (!string.IsNullOrEmpty(Sync.Error) && Sync.Status == SyncStatus.Error)
+            {
+                <div class="error-message" style="margin-top: 1rem;">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <span>@Sync.Error</span>
+                </div>
+            }
+
+            <!-- Action Buttons -->
+            <div class="settings-actions" style="margin-top: 1.5rem;">
+                @if (Sync.Status == SyncStatus.NotSignedIn)
+                {
+                    <button class="settings-action-button" @onclick="SignIn" disabled="@IsSyncBusy">
+                        <div class="action-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 001-9.9A5.002 5.002 0 007 8a4.002 4.002 0 00-3.9 3.06A3.5 3.5 0 003 15z" />
+                            </svg>
+                        </div>
+                        <div class="action-content">
+                            <span class="action-title">Sign in to Google Drive</span>
+                            <span class="action-description">Connect your account to enable sync</span>
+                        </div>
+                    </button>
+                }
+                else
+                {
+                    <button class="settings-action-button" @onclick="SyncNow" disabled="@IsSyncBusy">
+                        <div class="action-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 @(Sync.Status == SyncStatus.Syncing ? "animate-spin" : "")" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                        </div>
+                        <div class="action-content">
+                            <span class="action-title">@(Sync.Status == SyncStatus.Syncing ? "Syncing..." : "Sync now")</span>
+                            <span class="action-description">Merge changes with Google Drive</span>
+                        </div>
+                    </button>
+
+                    <button class="settings-action-button" @onclick="SignOut" disabled="@IsSyncBusy">
+                        <div class="action-icon restore-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                            </svg>
+                        </div>
+                        <div class="action-content">
+                            <span class="action-title">Sign out</span>
+                            <span class="action-description">Stop syncing on this device</span>
+                        </div>
+                    </button>
+                }
+            </div>
+        </div>
+
         <!-- Storage Usage -->
         <div class="settings-container storage-section" style="margin-top: 1.5rem;">
             <h2 class="text-xl font-semibold text-calm-text mb-4" style="align-self: flex-start;">Storage Usage</h2>
@@ -529,6 +609,57 @@
         font-size: 0.75rem;
         color: #606F7B;
         line-height: 1.4;
+    }
+
+    /* Cloud Sync */
+    .sync-status-line {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem 1rem;
+        width: 100%;
+    }
+
+    .sync-status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.375rem 0.875rem;
+        border-radius: 9999px;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        background-color: #F0EDE8;
+        color: #606F7B;
+    }
+
+    .sync-status-dot {
+        width: 0.625rem;
+        height: 0.625rem;
+        border-radius: 9999px;
+        background-color: #B8B2A7;
+    }
+
+    .sync-idle .sync-status-dot { background-color: #7BA3C4; }
+    .sync-idle { color: #6890B0; background-color: rgba(123, 163, 196, 0.15); }
+
+    .sync-syncing .sync-status-dot { background-color: #5B9A9A; animation: sync-badge-pulse 3s ease-in-out infinite; }
+    .sync-syncing { color: #4A8585; background-color: rgba(91, 154, 154, 0.15); }
+
+    .sync-synced .sync-status-dot { background-color: #6B9A7D; }
+    .sync-synced { color: #5A8369; background-color: rgba(107, 154, 125, 0.15); }
+
+    .sync-error .sync-status-dot { background-color: #D4A06A; }
+    .sync-error { color: #C08B55; background-color: rgba(212, 160, 106, 0.15); }
+
+    .sync-last-synced {
+        font-size: 0.8125rem;
+        color: #606F7B;
+    }
+
+    @@keyframes sync-badge-pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
     }
 
     /* Storage Usage */

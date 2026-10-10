@@ -14,11 +14,17 @@ public class LearningCardsDataService : ILearningCardsDataService
         _jsRuntime = jsRuntime;
     }
 
+    /// <inheritdoc />
+    public event Action? DataChanged;
+
+    private void RaiseDataChanged() => DataChanged?.Invoke();
+
     public async Task<List<LearningCategory>> GetAllCategoriesAsync()
     {
         var builtInCategories = GetBuiltInCategories();
         var customData = await GetCustomDataAsync();
         var customCategories = customData.Categories
+            .Where(c => !c.IsDeleted)
             .OrderBy(c => c.CreatedAt)
             .ToList();
 
@@ -38,7 +44,7 @@ public class LearningCardsDataService : ILearningCardsDataService
         // Check custom categories
         var customData = await GetCustomDataAsync();
         return customData.Cards
-            .Where(c => c.CategoryId == categoryId)
+            .Where(c => c.CategoryId == categoryId && !c.IsDeleted)
             .ToList();
     }
 
@@ -47,9 +53,11 @@ public class LearningCardsDataService : ILearningCardsDataService
         if (category.IsBuiltIn)
             return;
 
+        category.LastModifiedUtc = DateTime.UtcNow;
         var customData = await GetCustomDataAsync();
         customData.Categories.Add(category);
         await SaveCustomDataAsync(customData);
+        RaiseDataChanged();
     }
 
     public async Task AddCustomCardAsync(LearningCard card)
@@ -57,16 +65,25 @@ public class LearningCardsDataService : ILearningCardsDataService
         if (card.IsBuiltIn)
             return;
 
+        card.LastModifiedUtc = DateTime.UtcNow;
         var customData = await GetCustomDataAsync();
         customData.Cards.Add(card);
         await SaveCustomDataAsync(customData);
+        RaiseDataChanged();
     }
 
     public async Task DeleteCustomCardAsync(string cardId)
     {
         var customData = await GetCustomDataAsync();
-        customData.Cards.RemoveAll(c => c.Id == cardId);
+        var card = customData.Cards.FirstOrDefault(c => c.Id == cardId);
+        if (card == null)
+            return;
+
+        // Soft delete so the deletion propagates on sync.
+        card.IsDeleted = true;
+        card.LastModifiedUtc = DateTime.UtcNow;
         await SaveCustomDataAsync(customData);
+        RaiseDataChanged();
     }
 
     public async Task DeleteCustomCategoryAsync(string categoryId)
@@ -77,9 +94,24 @@ public class LearningCardsDataService : ILearningCardsDataService
             return;
 
         var customData = await GetCustomDataAsync();
-        customData.Categories.RemoveAll(c => c.Id == categoryId);
-        customData.Cards.RemoveAll(c => c.CategoryId == categoryId);
+        var now = DateTime.UtcNow;
+
+        var category = customData.Categories.FirstOrDefault(c => c.Id == categoryId);
+        if (category != null)
+        {
+            category.IsDeleted = true;
+            category.LastModifiedUtc = now;
+        }
+
+        // Cascade: tombstone every card belonging to the category.
+        foreach (var card in customData.Cards.Where(c => c.CategoryId == categoryId && !c.IsDeleted))
+        {
+            card.IsDeleted = true;
+            card.LastModifiedUtc = now;
+        }
+
         await SaveCustomDataAsync(customData);
+        RaiseDataChanged();
     }
 
     private static List<LearningCategory> GetBuiltInCategories() =>
@@ -99,23 +131,37 @@ public class LearningCardsDataService : ILearningCardsDataService
         _ => null
     };
 
-    private async Task<CustomLearningData> GetCustomDataAsync()
+    private async Task<LearningCardsSnapshot> GetCustomDataAsync()
     {
         try
         {
             var json = await _jsRuntime.InvokeAsync<string?>("indexedDb.getItem", StoreName);
             if (string.IsNullOrEmpty(json))
-                return new CustomLearningData();
+                return new LearningCardsSnapshot();
 
-            return JsonSerializer.Deserialize<CustomLearningData>(json) ?? new CustomLearningData();
+            var data = JsonSerializer.Deserialize<LearningCardsSnapshot>(json) ?? new LearningCardsSnapshot();
+
+            // Normalize missing sync metadata for records saved before sync existed.
+            foreach (var category in data.Categories)
+            {
+                if (category.LastModifiedUtc == default)
+                    category.LastModifiedUtc = category.CreatedAt != default ? category.CreatedAt : DateTime.UtcNow;
+            }
+            foreach (var card in data.Cards)
+            {
+                if (card.LastModifiedUtc == default)
+                    card.LastModifiedUtc = DateTime.UtcNow;
+            }
+
+            return data;
         }
         catch
         {
-            return new CustomLearningData();
+            return new LearningCardsSnapshot();
         }
     }
 
-    private async Task SaveCustomDataAsync(CustomLearningData data)
+    private async Task SaveCustomDataAsync(LearningCardsSnapshot data)
     {
         var json = JsonSerializer.Serialize(data);
         try
@@ -142,16 +188,23 @@ public class LearningCardsDataService : ILearningCardsDataService
     public async Task SetRawCustomDataJsonAsync(string json)
     {
         await _jsRuntime.InvokeVoidAsync("indexedDb.setItem", StoreName, json);
+        RaiseDataChanged();
     }
 
     public async Task ClearCustomDataAsync()
     {
         await _jsRuntime.InvokeVoidAsync("indexedDb.removeItem", StoreName);
+        RaiseDataChanged();
     }
 
-    private class CustomLearningData
+    public async Task<LearningCardsSnapshot> GetSyncSnapshotAsync()
     {
-        public List<LearningCategory> Categories { get; set; } = [];
-        public List<LearningCard> Cards { get; set; } = [];
+        return await GetCustomDataAsync();
+    }
+
+    public async Task ApplyMergedAsync(LearningCardsSnapshot snapshot)
+    {
+        // Result of a sync pull — must not raise DataChanged.
+        await SaveCustomDataAsync(snapshot);
     }
 }

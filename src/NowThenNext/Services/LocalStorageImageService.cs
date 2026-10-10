@@ -24,9 +24,16 @@ public class LocalStorageImageService : IImageStorageService
         _jsRuntime = jsRuntime;
     }
 
+    /// <inheritdoc />
+    public event Action? DataChanged;
+
+    private void RaiseDataChanged() => DataChanged?.Invoke();
+
     public async Task SaveImageAsync(ImageItem image)
     {
-        var images = await GetAllImagesAsync();
+        var images = await GetRawImagesAsync();
+
+        image.LastModifiedUtc = DateTime.UtcNow;
 
         // Check if image with this Id already exists (update) or is new (add)
         var existingIndex = images.FindIndex(i => i.Id == image.Id);
@@ -40,6 +47,7 @@ public class LocalStorageImageService : IImageStorageService
         }
 
         await SaveAllImagesAsync(images);
+        RaiseDataChanged();
     }
 
     public async Task<List<ImageItem>> GetImagesByCategoryAsync(ImageCategory category)
@@ -56,15 +64,24 @@ public class LocalStorageImageService : IImageStorageService
 
     public async Task DeleteImageAsync(string id)
     {
-        var images = await GetAllImagesAsync();
-        images.RemoveAll(i => i.Id == id);
+        // Soft delete: keep a tombstone so the deletion propagates to other devices.
+        var images = await GetRawImagesAsync();
+        var image = images.FirstOrDefault(i => i.Id == id);
+        if (image == null)
+        {
+            return;
+        }
+
+        image.IsDeleted = true;
+        image.LastModifiedUtc = DateTime.UtcNow;
         await SaveAllImagesAsync(images);
+        RaiseDataChanged();
     }
 
     public async Task<bool> ToggleFavoriteAsync(string id)
     {
-        var images = await GetAllImagesAsync();
-        var image = images.FirstOrDefault(i => i.Id == id);
+        var images = await GetRawImagesAsync();
+        var image = images.FirstOrDefault(i => i.Id == id && !i.IsDeleted);
 
         if (image == null)
         {
@@ -72,11 +89,27 @@ public class LocalStorageImageService : IImageStorageService
         }
 
         image.IsFavorite = !image.IsFavorite;
+        image.LastModifiedUtc = DateTime.UtcNow;
         await SaveAllImagesAsync(images);
+        RaiseDataChanged();
         return image.IsFavorite;
     }
 
+    /// <summary>
+    /// Returns live (non-deleted) images. Tombstones are excluded — use
+    /// <see cref="GetSyncSnapshotAsync"/> when tombstones are needed.
+    /// </summary>
     public async Task<List<ImageItem>> GetAllImagesAsync()
+    {
+        var all = await GetRawImagesAsync();
+        return all.Where(i => !i.IsDeleted).ToList();
+    }
+
+    /// <summary>
+    /// Reads the full stored list (including tombstones) and normalizes missing
+    /// sync metadata (older records saved before sync existed).
+    /// </summary>
+    private async Task<List<ImageItem>> GetRawImagesAsync()
     {
         try
         {
@@ -87,7 +120,15 @@ public class LocalStorageImageService : IImageStorageService
                 return new List<ImageItem>();
             }
 
-            return JsonSerializer.Deserialize<List<ImageItem>>(json) ?? new List<ImageItem>();
+            var list = JsonSerializer.Deserialize<List<ImageItem>>(json) ?? new List<ImageItem>();
+            foreach (var item in list)
+            {
+                if (item.LastModifiedUtc == default)
+                {
+                    item.LastModifiedUtc = item.CreatedAt != default ? item.CreatedAt : DateTime.UtcNow;
+                }
+            }
+            return list;
         }
         catch
         {
@@ -155,10 +196,24 @@ public class LocalStorageImageService : IImageStorageService
     public async Task ClearAllImagesAsync()
     {
         await _jsRuntime.InvokeVoidAsync("indexedDb.removeItem", StoreName);
+        RaiseDataChanged();
     }
 
     public async Task SaveImagesAsync(List<ImageItem> images)
     {
+        await SaveAllImagesAsync(images);
+        RaiseDataChanged();
+    }
+
+    public async Task<List<ImageItem>> GetSyncSnapshotAsync()
+    {
+        return await GetRawImagesAsync();
+    }
+
+    public async Task ApplyMergedAsync(List<ImageItem> images)
+    {
+        // Deliberately does NOT raise DataChanged: this is the result of a sync
+        // pull, not a local edit, so it must not trigger another sync cycle.
         await SaveAllImagesAsync(images);
     }
 

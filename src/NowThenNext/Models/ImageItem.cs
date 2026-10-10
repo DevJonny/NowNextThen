@@ -13,7 +13,7 @@ public enum ImageCategory
 /// <summary>
 /// Represents a stored image for the schedule or food choices
 /// </summary>
-public class ImageItem
+public class ImageItem : ISyncEntity
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
     public string Base64Data { get; set; } = string.Empty;
@@ -21,4 +21,8 @@ public class ImageItem
     public ImageCategory Category { get; set; }
     public bool IsFavorite { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    // Sync metadata (see ISyncEntity)
+    public DateTime LastModifiedUtc { get; set; } = DateTime.UtcNow;
+    public bool IsDeleted { get; set; }
 }

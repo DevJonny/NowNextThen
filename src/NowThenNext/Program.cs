@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using Microsoft.JSInterop;
 using NowThenNext;
 using NowThenNext.Services;
+using NowThenNext.Services.Sync;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
@@ -13,6 +14,7 @@ builder.Services.AddScoped<IImageStorageService, LocalStorageImageService>();
 builder.Services.AddSingleton<IPhonicsDataService, PhonicsDataService>();
 builder.Services.AddScoped<IPhonicsProgressService, PhonicsProgressService>();
 builder.Services.AddScoped<ILearningCardsDataService, LearningCardsDataService>();
+builder.Services.AddScoped<SyncService>();
 
 var host = builder.Build();
 
