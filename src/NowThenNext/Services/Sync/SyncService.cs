@@ -262,8 +262,10 @@ public partial class SyncService
             catch (JSException jsex)
             {
                 var status = ParseDriveStatus(jsex.Message);
-                if (status == 412 && attempt < MaxRetries - 1)
-                    continue; // another device wrote first — re-download and merge again
+                // 412: another device wrote first. 404: another device's cleanup removed a
+                // file we listed. Either way, list, download and merge again.
+                if (status is 412 or 404 && attempt < MaxRetries - 1)
+                    continue;
 
                 throw; // 401 can't be retried without a user gesture; SyncNowAsync asks to reconnect.
             }
