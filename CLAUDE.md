@@ -232,7 +232,7 @@ public class MyTests(BlazorAppFixture fixture)
 
 ## Test Status
 - **E2E (`tests/NowThenNext.Tests.E2E`, Playwright)**: HomePageTests, UploadTests, LibraryTests, ScheduleTests, FoodChoicesTests, ActivityChoicesTests, BackupRestoreTests, PhonicsTests, LearningCardsTests, CloudSyncTests (signed-out sync UI)
-- **Unit (`tests/NowThenNext.Tests.Unit`, xUnit v3)**: `SyncMergeEngineTests` covers the merge engine (LWW, tombstone propagation, 90-day GC, phonics map merge). Run with `dotnet test tests/NowThenNext.Tests.Unit`.
+- **Unit (`tests/NowThenNext.Tests.Unit`, xUnit v3)**: `SyncMergeEngineTests` covers the merge engine (LWW, tombstone propagation, 90-day GC, phonics map merge). `SyncServiceTests` covers the signed-in paths (401, 412 re-merge, duplicate files, mid-sync edits, offline backoff, partial apply) against `Fakes/` (in-memory Drive `IJSRuntime` + stores) and a `FakeTimeProvider`. Run with `dotnet test tests/NowThenNext.Tests.Unit`.
 - **Coverage**: All user stories (US-001 to US-037, US-046 to US-048)
 - Note: Google Drive sign-in uses a Google popup that can't be automated in Playwright, so sync E2E is limited to the signed-out UI.
 
