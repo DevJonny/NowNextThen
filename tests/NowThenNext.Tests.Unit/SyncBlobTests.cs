@@ -126,6 +126,22 @@ public class SyncBlobTests
     }
 
     [Fact]
+    public async Task EqualTimestampConflict_WithSameLengthImages_Converges()
+    {
+        // Same id, timestamp and payload length, different content: the hash cache must
+        // not let one copy borrow the other's hash, or the tie-break never sees a difference.
+        string local = Payload("x"), remote = Payload("y");
+        _drive.AddLegacy(new SyncEnvelope { Images = [Img("a", payload: remote)] });
+        _device.Images.Items = [Img("a", payload: local)];
+
+        await _device.Sync.SyncNowAsync();
+
+        var winner = string.CompareOrdinal(SyncBlobs.Hash(local), SyncBlobs.Hash(remote)) > 0 ? local : remote;
+        Assert.Equal(winner, _device.Image("a").Base64Data);
+        Assert.Equal(SyncBlobs.Ref(SyncBlobs.Hash(winner)), Manifest().Images.Single().Base64Data);
+    }
+
+    [Fact]
     public async Task FailedImageUpload_WritesNoManifestPointingAtIt()
     {
         _device.Images.Items = [Img("a")];

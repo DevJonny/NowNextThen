@@ -307,7 +307,7 @@ public partial class SyncService
             envelope.LearningCards.Categories ??= [];
             envelope.LearningCards.Cards ??= [];
             envelope.PhonicsProgress ??= new Dictionary<string, PhonicsCardProgress>();
-            _blobs.Strip(envelope, payloads);
+            _blobs.Strip(envelope, payloads, isLocalStore: false);
             remote = remote == null ? envelope : MergeEnvelopes(remote, envelope);
         }
 
@@ -318,7 +318,7 @@ public partial class SyncService
             LearningCards = await _learning.GetSyncSnapshotAsync(),
             PhonicsProgress = await _phonics.GetSyncSnapshotAsync()
         };
-        _blobs.Strip(local, payloads);
+        _blobs.Strip(local, payloads, isLocalStore: true);
 
         var imageMerge = SyncMergeEngine.MergeById(local.Images, remote?.Images ?? []);
         var categoryMerge = SyncMergeEngine.MergeById(local.LearningCards.Categories, remote?.LearningCards.Categories ?? []);
