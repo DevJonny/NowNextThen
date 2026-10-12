@@ -9,8 +9,9 @@ namespace NowThenNext.Services.Sync;
 /// <summary>
 /// Orchestrates cross-device sync with Google Drive's appDataFolder. Auth and the
 /// Drive HTTP calls live in JS (<c>window.googleAuth</c> / <c>window.driveSync</c>);
-/// this service owns the merge and the status state machine. Ported from DiceCalc's
-/// <c>syncService.ts</c>.
+/// this service owns the merge and the status state machine. Images live in their own
+/// Drive files, referenced by hash from a small manifest (see <see cref="SyncBlobs"/>).
+/// Ported from DiceCalc's <c>syncService.ts</c>.
 /// </summary>
 public partial class SyncService
 {
@@ -25,6 +26,11 @@ public partial class SyncService
     private const int FirstOfflineRetryMs = 15_000;
     private const int MaxOfflineRetryMs = 5 * 60_000;
 
+    // An unreferenced image file younger than this may belong to another device's sync that
+    // hasn't written its manifest yet, so it is left alone.
+    private static readonly TimeSpan OrphanBlobMinAge = TimeSpan.FromHours(1);
+    private const int TransferConcurrency = 4;
+
     // The envelope round-trips through Drive as a string, deserialized here — so use
     // one options instance for both directions. (Default = PascalCase property names.)
     private static readonly JsonSerializerOptions EnvelopeJson = new(JsonSerializerOptions.Default);
@@ -37,6 +43,12 @@ public partial class SyncService
 
     // Bumped on every local edit, so a sync can tell an edit landed after it read the snapshots.
     private int _localEditCount;
+
+    private readonly SyncBlobs _blobs = new();
+
+    // Images downloaded during the current sync, kept across its retries so a conflict or
+    // mid-sync edit doesn't fetch them again.
+    private readonly Dictionary<string, string> _downloaded = new();
 
     public SyncService(
         IJSRuntime js,
@@ -184,7 +196,7 @@ public partial class SyncService
         try
         {
             await RunWithRetryAsync();
-            LastSyncedUtc = DateTime.UtcNow;
+            LastSyncedUtc = _time.GetUtcNow().UtcDateTime;
             _offlineRetryMs = FirstOfflineRetryMs;
             SetStatus(SyncStatus.Synced);
         }
@@ -217,6 +229,7 @@ public partial class SyncService
         finally
         {
             _inFlight = false;
+            _downloaded.Clear();
             if (_syncRequestedWhileInFlight)
             {
                 _syncRequestedWhileInFlight = false;
@@ -259,78 +272,147 @@ public partial class SyncService
 
     private async Task PerformSyncAsync()
     {
-        // Oldest first. Extra files come from devices whose first syncs raced; fold them
+        // Oldest first. Extra manifests come from devices whose first syncs raced; fold them
         // all into the oldest so every device converges on the same file.
-        var files = await _js.InvokeAsync<List<DriveFileHandle>>("driveSync.findSyncFiles");
-        var existing = files.FirstOrDefault();
-        var duplicates = files.Skip(1).ToList();
+        var files = await _js.InvokeAsync<List<DriveFile>>("driveSync.listFiles");
+        var manifests = files.Where(f => f.Name == SyncBlobs.ManifestFileName).ToList();
+        var legacy = files.Where(f => f.Name == SyncBlobs.LegacyFileName).ToList();
+        var existing = manifests.FirstOrDefault();
+        var duplicates = manifests.Skip(1).ToList();
 
-        SyncEnvelope? remote = null;
+        var blobFiles = new Dictionary<string, DriveFile>();
+        var duplicateBlobs = new List<DriveFile>();
         foreach (var file in files)
         {
-            var remoteJson = await _js.InvokeAsync<string?>("driveSync.downloadSyncFile", file.Id);
+            if (SyncBlobs.TryGetBlobHash(file.Name, out var hash) && !blobFiles.TryAdd(hash, file))
+                duplicateBlobs.Add(file);
+        }
+
+        // Image payloads this sync can supply, by hash: from local stores, the legacy file,
+        // and downloads from an earlier attempt.
+        var payloads = new Dictionary<string, string>(_downloaded);
+
+        SyncEnvelope? remote = null;
+        foreach (var file in manifests.Concat(legacy))
+        {
+            var remoteJson = await _js.InvokeAsync<string?>("driveSync.downloadFile", file.Id);
             if (string.IsNullOrEmpty(remoteJson)) continue;
 
             var envelope = JsonSerializer.Deserialize<SyncEnvelope>(remoteJson, EnvelopeJson);
-            if (envelope != null)
-                remote = remote == null ? envelope : MergeEnvelopes(remote, envelope);
+            if (envelope == null) continue;
+
+            // Manifests are already stripped; the legacy file carries its images inline.
+            envelope.Images ??= [];
+            envelope.LearningCards ??= new LearningCardsSnapshot();
+            envelope.LearningCards.Categories ??= [];
+            envelope.LearningCards.Cards ??= [];
+            envelope.PhonicsProgress ??= new Dictionary<string, PhonicsCardProgress>();
+            _blobs.Strip(envelope, payloads);
+            remote = remote == null ? envelope : MergeEnvelopes(remote, envelope);
         }
 
         var editCountAtSnapshot = _localEditCount;
-        var localImages = await _images.GetSyncSnapshotAsync();
-        var localLearning = await _learning.GetSyncSnapshotAsync();
-        var localPhonics = await _phonics.GetSyncSnapshotAsync();
+        var local = new SyncEnvelope
+        {
+            Images = await _images.GetSyncSnapshotAsync(),
+            LearningCards = await _learning.GetSyncSnapshotAsync(),
+            PhonicsProgress = await _phonics.GetSyncSnapshotAsync()
+        };
+        _blobs.Strip(local, payloads);
 
-        var remoteImages = remote?.Images ?? new List<ImageItem>();
-        var remoteCategories = remote?.LearningCards?.Categories ?? new List<LearningCategory>();
-        var remoteCards = remote?.LearningCards?.Cards ?? new List<LearningCard>();
-        var remotePhonics = remote?.PhonicsProgress ?? new Dictionary<string, PhonicsCardProgress>();
-
-        var imageMerge = SyncMergeEngine.MergeById(localImages, remoteImages);
-        var categoryMerge = SyncMergeEngine.MergeById(localLearning.Categories, remoteCategories);
-        var cardMerge = SyncMergeEngine.MergeById(localLearning.Cards, remoteCards);
-        var phonicsMerge = SyncMergeEngine.MergePhonics(localPhonics, remotePhonics);
+        var imageMerge = SyncMergeEngine.MergeById(local.Images, remote?.Images ?? []);
+        var categoryMerge = SyncMergeEngine.MergeById(local.LearningCards.Categories, remote?.LearningCards.Categories ?? []);
+        var cardMerge = SyncMergeEngine.MergeById(local.LearningCards.Cards, remote?.LearningCards.Cards ?? []);
+        var phonicsMerge = SyncMergeEngine.MergePhonics(local.PhonicsProgress, remote?.PhonicsProgress ?? []);
 
         var localChanged = imageMerge.LocalChanged || categoryMerge.LocalChanged
             || cardMerge.LocalChanged || phonicsMerge.LocalChanged;
         var remoteChanged = imageMerge.RemoteChanged || categoryMerge.RemoteChanged
             || cardMerge.RemoteChanged || phonicsMerge.RemoteChanged;
 
-        var mergedLearning = new LearningCardsSnapshot
+        var merged = new SyncEnvelope
         {
-            Categories = categoryMerge.Merged,
-            Cards = cardMerge.Merged
+            Version = 2,
+            LastSyncedUtc = _time.GetUtcNow().UtcDateTime,
+            Images = imageMerge.Merged,
+            LearningCards = new LearningCardsSnapshot { Categories = categoryMerge.Merged, Cards = cardMerge.Merged },
+            PhonicsProgress = phonicsMerge.Merged
         };
+        var referenced = SyncBlobs.Refs(merged);
 
         if (localChanged)
         {
+            // Fetch only the images this device doesn't have. A missing one is skipped:
+            // Hydrate keeps the local copy of that record, and the next sync tries again.
+            var toDownload = referenced
+                .Where(hash => !payloads.ContainsKey(hash) && blobFiles.ContainsKey(hash))
+                .ToList();
+            foreach (var batch in toDownload.Chunk(TransferConcurrency))
+            {
+                var downloaded = await Task.WhenAll(batch.Select(async hash =>
+                    (Hash: hash, Payload: await DownloadBlobAsync(blobFiles[hash]))));
+                foreach (var (hash, payload) in downloaded)
+                {
+                    if (payload == null || SyncBlobs.Hash(payload) != hash) continue;
+                    payloads[hash] = payload;
+                    _downloaded[hash] = payload;
+                }
+            }
+
+            var mergedLearning = new LearningCardsSnapshot
+            {
+                Categories = categoryMerge.Merged,
+                Cards = _blobs.Hydrate(cardMerge.Merged, local.LearningCards.Cards, payloads)
+            };
+            var mergedImages = _blobs.Hydrate(imageMerge.Merged, local.Images, payloads);
+
             // Writing a merge built from snapshots older than a local edit would erase that edit.
             EnsureNoLocalEditsSince(editCountAtSnapshot);
-            await _images.ApplyMergedAsync(imageMerge.Merged);
+            await _images.ApplyMergedAsync(mergedImages);
             EnsureNoLocalEditsSince(editCountAtSnapshot);
             await _learning.ApplyMergedAsync(mergedLearning);
             EnsureNoLocalEditsSince(editCountAtSnapshot);
             await _phonics.ApplyMergedAsync(phonicsMerge.Merged);
         }
 
-        if (remoteChanged || existing == null || duplicates.Count > 0)
-        {
-            var envelope = new SyncEnvelope
-            {
-                Version = 1,
-                LastSyncedUtc = DateTime.UtcNow,
-                Images = imageMerge.Merged,
-                LearningCards = mergedLearning,
-                PhonicsProgress = phonicsMerge.Merged
-            };
+        // Upload every referenced image Drive lacks (new local ones, legacy payloads, or one
+        // another device failed to upload) before writing a manifest that points at it.
+        var toUpload = referenced
+            .Where(hash => !blobFiles.ContainsKey(hash) && payloads.ContainsKey(hash))
+            .ToList();
+        foreach (var batch in toUpload.Chunk(TransferConcurrency))
+            await Task.WhenAll(batch.Select(hash => _js.InvokeVoidAsync(
+                "driveSync.uploadFile", SyncBlobs.BlobFileName(hash), payloads[hash], "text/plain", null, null).AsTask()));
 
-            var envelopeJson = JsonSerializer.Serialize(envelope, EnvelopeJson);
-            await _js.InvokeVoidAsync("driveSync.uploadSyncFile", envelopeJson, existing?.Id, existing?.Version);
+        if (remoteChanged || existing == null || duplicates.Count > 0 || legacy.Count > 0)
+        {
+            var manifestJson = JsonSerializer.Serialize(merged, EnvelopeJson);
+            await _js.InvokeVoidAsync("driveSync.uploadFile",
+                SyncBlobs.ManifestFileName, manifestJson, "application/json", existing?.Id, existing?.Version);
         }
 
-        // Only after the merged data is safely in the oldest file.
-        foreach (var duplicate in duplicates)
-            await _js.InvokeVoidAsync("driveSync.deleteSyncFile", duplicate.Id);
+        // Only after the merged data is safely in the oldest manifest.
+        var orphanCutoff = _time.GetUtcNow().UtcDateTime - OrphanBlobMinAge;
+        var obsolete = duplicates
+            .Concat(legacy)
+            .Concat(duplicateBlobs)
+            .Concat(blobFiles
+                .Where(b => !referenced.Contains(b.Key) && b.Value.CreatedTime < orphanCutoff)
+                .Select(b => b.Value));
+        foreach (var file in obsolete)
+            await _js.InvokeVoidAsync("driveSync.deleteFile", file.Id);
+    }
+
+    private async Task<string?> DownloadBlobAsync(DriveFile file)
+    {
+        try
+        {
+            return await _js.InvokeAsync<string?>("driveSync.downloadFile", file.Id);
+        }
+        catch (JSException jsex) when (ParseDriveStatus(jsex.Message) == 404)
+        {
+            return null; // deleted since we listed it
+        }
     }
 
     private void EnsureNoLocalEditsSince(int editCount)
@@ -373,10 +455,12 @@ public partial class SyncService
     [GeneratedRegex(@"DRIVE_ERROR:(\d+):")]
     private static partial Regex DriveErrorRegex();
 
-    /// <summary>Small handle for a Drive sync file returned by JS (<c>{ id, version }</c>).</summary>
-    private sealed class DriveFileHandle
+    /// <summary>An appDataFolder file as listed by JS (<c>{ id, name, version, createdTime }</c>).</summary>
+    private sealed class DriveFile
     {
         public string Id { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
         public string? Version { get; set; }
+        public DateTime CreatedTime { get; set; }
     }
 }
