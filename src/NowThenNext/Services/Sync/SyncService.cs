@@ -18,6 +18,7 @@ public partial class SyncService
     private readonly IImageStorageService _images;
     private readonly ILearningCardsDataService _learning;
     private readonly IPhonicsProgressService _phonics;
+    private readonly TimeProvider _time;
 
     private const int DebounceMs = 2000;
     private const int MaxRetries = 3;
@@ -41,12 +42,14 @@ public partial class SyncService
         IJSRuntime js,
         IImageStorageService images,
         ILearningCardsDataService learning,
-        IPhonicsProgressService phonics)
+        IPhonicsProgressService phonics,
+        TimeProvider time)
     {
         _js = js;
         _images = images;
         _learning = learning;
         _phonics = phonics;
+        _time = time;
 
         // Auto-schedule a sync whenever local data changes (app lifetime; no unsubscribe).
         _images.DataChanged += OnLocalDataChanged;
@@ -150,7 +153,7 @@ public partial class SyncService
 
     private async Task DelayedSyncAsync(int delayMs, CancellationToken ct)
     {
-        try { await Task.Delay(delayMs, ct); }
+        try { await Task.Delay(TimeSpan.FromMilliseconds(delayMs), _time, ct); }
         catch (TaskCanceledException) { return; }
         if (!ct.IsCancellationRequested)
             await SyncNowAsync();
