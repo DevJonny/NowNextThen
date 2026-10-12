@@ -21,8 +21,10 @@ public sealed class SyncBlobs
     /// <summary>Shorter payloads (built-in SVGs, asset paths) stay inline in the manifest.</summary>
     public const int MinBlobLength = 1024;
 
-    // Hashing every image on every sync is costly in WASM, so remember each record's hash
-    // until its timestamp or payload length changes.
+    // Hashing every image on every sync is costly in WASM, so remember the hash of each record
+    // in this device's store until its timestamp or payload length changes. Only that store
+    // feeds the cache: its payloads change only with a new timestamp or through Hydrate, which
+    // records the exact hash. A remote copy can share id, timestamp and length yet differ.
     private readonly Dictionary<string, (DateTime Modified, int Length, string Hash)> _hashes = new();
 
     public static string BlobFileName(string hash) => BlobFilePrefix + hash;
@@ -55,14 +57,15 @@ public sealed class SyncBlobs
 
     /// <summary>
     /// Replaces large payloads in <paramref name="envelope"/> with refs, in place, adding each
-    /// payload to <paramref name="payloads"/> by hash.
+    /// payload to <paramref name="payloads"/> by hash. Set <paramref name="isLocalStore"/> only
+    /// for this device's own snapshot; anything else is hashed in full.
     /// </summary>
-    public void Strip(SyncEnvelope envelope, Dictionary<string, string> payloads)
+    public void Strip(SyncEnvelope envelope, Dictionary<string, string> payloads, bool isLocalStore)
     {
         foreach (var image in envelope.Images)
-            image.Base64Data = StripOne("image:" + image.Id, image.LastModifiedUtc, image.Base64Data, payloads);
+            image.Base64Data = StripOne(isLocalStore ? "image:" + image.Id : null, image.LastModifiedUtc, image.Base64Data, payloads);
         foreach (var card in envelope.LearningCards.Cards)
-            card.ImageData = StripOne("card:" + card.Id, card.LastModifiedUtc, card.ImageData, payloads);
+            card.ImageData = StripOne(isLocalStore ? "card:" + card.Id : null, card.LastModifiedUtc, card.ImageData, payloads);
     }
 
     /// <summary>
@@ -111,19 +114,25 @@ public sealed class SyncBlobs
         return result;
     }
 
-    private string StripOne(string key, DateTime modified, string? payload, Dictionary<string, string> payloads)
+    private string StripOne(string? cacheKey, DateTime modified, string? payload, Dictionary<string, string> payloads)
     {
         if (payload == null || payload.Length < MinBlobLength || TryGetRef(payload, out _))
             return payload ?? string.Empty;
 
-        if (!_hashes.TryGetValue(key, out var cached) || cached.Modified != modified || cached.Length != payload.Length)
+        string hash;
+        if (cacheKey != null && _hashes.TryGetValue(cacheKey, out var cached)
+            && cached.Modified == modified && cached.Length == payload.Length)
         {
-            cached = (modified, payload.Length, Hash(payload));
-            _hashes[key] = cached;
+            hash = cached.Hash;
+        }
+        else
+        {
+            hash = Hash(payload);
+            if (cacheKey != null) _hashes[cacheKey] = (modified, payload.Length, hash);
         }
 
-        payloads.TryAdd(cached.Hash, payload);
-        return Ref(cached.Hash);
+        payloads.TryAdd(hash, payload);
+        return Ref(hash);
     }
 
     private static IEnumerable<string> Payloads(SyncEnvelope envelope)
