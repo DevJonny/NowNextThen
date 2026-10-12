@@ -12,20 +12,21 @@ namespace NowThenNext.Tests.Unit;
 /// </summary>
 public class SyncServiceTests
 {
-    private const string FindFiles = "driveSync.findSyncFiles";
-    private const string Upload = "driveSync.uploadSyncFile";
+    private const string FindFiles = "driveSync.listFiles";
+    private const string Upload = "driveSync.uploadFile";
 
     private static readonly DateTime Base = DateTime.UtcNow.AddHours(-1);
 
-    private readonly FakeDriveJsRuntime _drive = new();
     private readonly FakeImageStore _images = new();
     private readonly FakeLearningStore _learning = new();
     private readonly FakePhonicsStore _phonics = new();
     private readonly FakeTimeProvider _time = new();
+    private readonly FakeDriveJsRuntime _drive;
     private readonly SyncService _sync;
 
     public SyncServiceTests()
     {
+        _drive = new FakeDriveJsRuntime(_time);
         _sync = new SyncService(_drive, _images, _learning, _phonics, _time);
     }
 
@@ -86,7 +87,7 @@ public class SyncServiceTests
     [Fact]
     public async Task VersionConflict_RedownloadsAndRemergesTheOtherDevicesWrite()
     {
-        var file = _drive.AddFile(Envelope(Img("r1")));
+        var file = _drive.AddManifest(Envelope(Img("r1")));
         _images.Items = [Img("l1")];
 
         // Another device writes between our download and our upload, once.
@@ -103,14 +104,14 @@ public class SyncServiceTests
 
         Assert.Equal(SyncStatus.Synced, _sync.Status);
         Assert.Equal(2, _drive.CallCount(Upload));
-        Assert.Equal(["l1", "o1", "r1"], RemoteIds(Assert.Single(_drive.Files)));
+        Assert.Equal(["l1", "o1", "r1"], RemoteIds(Assert.Single(_drive.Manifests)));
         Assert.Equal(["l1", "o1", "r1"], Ids(_images.Items));
     }
 
     [Fact]
     public async Task VersionConflictEveryAttempt_GivesUpWithError()
     {
-        var file = _drive.AddFile(Envelope());
+        var file = _drive.AddManifest(Envelope());
         _images.Items = [Img("l1")];
         _drive.BeforeUpload = () => file.Version++;
 
@@ -124,13 +125,13 @@ public class SyncServiceTests
     [Fact]
     public async Task DuplicateSyncFiles_AreMergedIntoTheOldestAndTheRestDeleted()
     {
-        var oldest = _drive.AddFile(Envelope(Img("r1"), Img("shared", "old", minutes: 0)));
-        _drive.AddFile(Envelope(Img("r2"), Img("shared", "new", minutes: 5)));
+        var oldest = _drive.AddManifest(Envelope(Img("r1"), Img("shared", "old", minutes: 0)));
+        _drive.AddManifest(Envelope(Img("r2"), Img("shared", "new", minutes: 5)));
         _images.Items = [Img("l1")];
 
         await _sync.SyncNowAsync();
 
-        var remaining = Assert.Single(_drive.Files);
+        var remaining = Assert.Single(_drive.Manifests);
         Assert.Equal(oldest.Id, remaining.Id);
         Assert.Equal(["l1", "r1", "r2", "shared"], RemoteIds(remaining));
         Assert.Equal("new", FakeDriveJsRuntime.Read(remaining).Images.Single(i => i.Id == "shared").Label);
@@ -140,19 +141,19 @@ public class SyncServiceTests
     [Fact]
     public async Task DuplicateSyncFiles_WithNothingNew_StillCollapseToOne()
     {
-        var oldest = _drive.AddFile(Envelope(Img("r1")));
-        _drive.AddFile(Envelope(Img("r1")));
+        var oldest = _drive.AddManifest(Envelope(Img("r1")));
+        _drive.AddManifest(Envelope(Img("r1")));
         _images.Items = [Img("r1")];
 
         await _sync.SyncNowAsync();
 
-        Assert.Equal(oldest.Id, Assert.Single(_drive.Files).Id);
+        Assert.Equal(oldest.Id, Assert.Single(_drive.Manifests).Id);
     }
 
     [Fact]
     public async Task LocalEditMidSync_AbortsTheStaleApplyAndRetries()
     {
-        _drive.AddFile(Envelope(Img("r1")));
+        _drive.AddManifest(Envelope(Img("r1")));
         _images.Items = [Img("l1", "before")];
 
         // The user edits l1 after the sync has read its snapshot, once.
@@ -169,14 +170,14 @@ public class SyncServiceTests
         Assert.Equal(SyncStatus.Synced, _sync.Status);
         Assert.Equal("after", _images.Items.Single(i => i.Id == "l1").Label);
         Assert.Equal(["l1", "r1"], Ids(_images.Items));
-        var remote = FakeDriveJsRuntime.Read(Assert.Single(_drive.Files));
+        var remote = FakeDriveJsRuntime.Read(Assert.Single(_drive.Manifests));
         Assert.Equal("after", remote.Images.Single(i => i.Id == "l1").Label);
     }
 
     [Fact]
     public async Task LocalEditOnEveryAttempt_NeverOverwritesTheEdit_AndQueuesAnotherSync()
     {
-        _drive.AddFile(Envelope(Img("r1")));
+        _drive.AddManifest(Envelope(Img("r1")));
         _images.Items = [Img("l1")];
 
         var edits = 0;
@@ -219,14 +220,14 @@ public class SyncServiceTests
 
         _time.Advance(TimeSpan.FromSeconds(15));
         await WaitUntil(() => _sync.Status == SyncStatus.Synced);
-        Assert.Equal(["l1"], RemoteIds(Assert.Single(_drive.Files)));
+        Assert.Equal(["l1"], RemoteIds(Assert.Single(_drive.Manifests)));
     }
 
     [Fact]
     public async Task StoreApplyFailingPartway_LeavesRemoteUntouched_AndNextSyncRecovers()
     {
         var category = new LearningCategory { Id = "c1", Name = "Remote", LastModifiedUtc = Base };
-        var file = _drive.AddFile(new SyncEnvelope
+        var file = _drive.AddManifest(new SyncEnvelope
         {
             Images = [Img("r1")],
             LearningCards = new LearningCardsSnapshot { Categories = [category] }

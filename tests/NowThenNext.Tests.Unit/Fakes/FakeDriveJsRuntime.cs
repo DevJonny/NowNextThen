@@ -2,21 +2,24 @@ using System.Text.Json;
 using Microsoft.JSInterop;
 using Microsoft.JSInterop.Infrastructure;
 using NowThenNext.Models;
+using NowThenNext.Services.Sync;
 
 namespace NowThenNext.Tests.Unit.Fakes;
 
 /// <summary>
 /// Stands in for <c>window.googleAuth</c> and <c>window.driveSync</c>, backed by an
-/// in-memory appDataFolder. Mirrors googleDrive.js: files are kept oldest first, and
+/// in-memory appDataFolder. Mirrors googleDrive.js: files are listed oldest first, and
 /// an upload whose expected version is stale fails with <c>DRIVE_ERROR:412</c>.
 /// </summary>
-public sealed class FakeDriveJsRuntime : IJSRuntime
+public sealed class FakeDriveJsRuntime(TimeProvider time) : IJSRuntime
 {
     public sealed class DriveFile
     {
         public string Id { get; init; } = string.Empty;
+        public string Name { get; init; } = string.Empty;
         public int Version { get; set; } = 1;
         public string Content { get; set; } = string.Empty;
+        public DateTime CreatedTime { get; init; }
     }
 
     // SyncService writes the envelope with default (PascalCase) options.
@@ -32,14 +35,27 @@ public sealed class FakeDriveJsRuntime : IJSRuntime
     /// <summary>Return an exception to make that JS call fail, or null to let it run.</summary>
     public Func<string, Exception?>? FailWith { get; set; }
 
-    /// <summary>Runs at the start of each upload, before the version check (simulates another device writing).</summary>
+    /// <summary>Runs at the start of each manifest upload, before the version check (simulates another device writing).</summary>
     public Action? BeforeUpload { get; set; }
 
     public int CallCount(string identifier) => Calls.Count(c => c == identifier);
 
-    public DriveFile AddFile(SyncEnvelope envelope)
+    public IEnumerable<DriveFile> Manifests => Files.Where(f => f.Name == SyncBlobs.ManifestFileName);
+    public IEnumerable<DriveFile> Blobs => Files.Where(f => f.Name.StartsWith(SyncBlobs.BlobFilePrefix));
+
+    public DriveFile AddManifest(SyncEnvelope envelope) => AddFile(SyncBlobs.ManifestFileName, Serialize(envelope));
+    public DriveFile AddLegacy(SyncEnvelope envelope) => AddFile(SyncBlobs.LegacyFileName, Serialize(envelope));
+    public DriveFile AddBlob(string payload) => AddFile(SyncBlobs.BlobFileName(SyncBlobs.Hash(payload)), payload);
+
+    public DriveFile AddFile(string name, string content)
     {
-        var file = new DriveFile { Id = $"file-{++_nextId}", Content = Serialize(envelope) };
+        var file = new DriveFile
+        {
+            Id = $"file-{++_nextId}",
+            Name = name,
+            Content = content,
+            CreatedTime = time.GetUtcNow().UtcDateTime
+        };
         Files.Add(file);
         return file;
     }
@@ -77,21 +93,22 @@ public sealed class FakeDriveJsRuntime : IJSRuntime
     {
         "googleAuth.isSignedIn" => SignedIn,
         "googleAuth.hasPreviousSession" => HasPreviousSession,
-        "driveSync.findSyncFiles" => Files.Select(f => new { id = f.Id, version = f.Version.ToString() }).ToList(),
-        "driveSync.downloadSyncFile" => Find((string)args[0]!).Content,
-        "driveSync.uploadSyncFile" => Upload((string)args[0]!, (string?)args[1], (string?)args[2]),
-        "driveSync.deleteSyncFile" => Files.RemoveAll(f => f.Id == (string)args[0]!),
+        "driveSync.listFiles" => Files
+            .Select(f => new { id = f.Id, name = f.Name, version = f.Version.ToString(), createdTime = f.CreatedTime })
+            .ToList(),
+        "driveSync.downloadFile" => Find((string)args[0]!).Content,
+        "driveSync.uploadFile" => Upload((string)args[0]!, (string)args[1]!, (string?)args[3], (string?)args[4]),
+        "driveSync.deleteFile" => Files.RemoveAll(f => f.Id == (string)args[0]!),
         _ => throw new NotSupportedException($"Unexpected JS call: {identifier}")
     };
 
-    private object Upload(string json, string? existingId, string? expectedVersion)
+    private object Upload(string name, string content, string? existingId, string? expectedVersion)
     {
-        BeforeUpload?.Invoke();
+        if (name == SyncBlobs.ManifestFileName) BeforeUpload?.Invoke();
 
         if (existingId == null)
         {
-            var created = new DriveFile { Id = $"file-{++_nextId}", Content = json };
-            Files.Add(created);
+            var created = AddFile(name, content);
             return new { id = created.Id, version = created.Version.ToString() };
         }
 
@@ -99,7 +116,7 @@ public sealed class FakeDriveJsRuntime : IJSRuntime
         if (expectedVersion != null && file.Version.ToString() != expectedVersion)
             throw DriveError(412);
 
-        file.Content = json;
+        file.Content = content;
         file.Version++;
         return new { id = file.Id, version = file.Version.ToString() };
     }
