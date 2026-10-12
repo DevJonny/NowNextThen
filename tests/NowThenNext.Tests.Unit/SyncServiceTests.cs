@@ -109,6 +109,49 @@ public class SyncServiceTests
     }
 
     [Fact]
+    public async Task ManifestDeletedBeforeDownload_RestartsFromTheListing()
+    {
+        _drive.AddManifest(Envelope(Img("r1")));
+        _images.Items = [Img("l1")];
+        var vanished = false;
+        _drive.FailWith = id =>
+        {
+            if (id != "driveSync.downloadFile" || vanished) return null;
+            vanished = true;
+            return FakeDriveJsRuntime.DriveError(404);
+        };
+
+        await _sync.SyncNowAsync();
+
+        Assert.Equal(SyncStatus.Synced, _sync.Status);
+        Assert.Equal(2, _drive.CallCount(FindFiles));
+        Assert.Equal(["l1", "r1"], Ids(_images.Items));
+    }
+
+    [Fact]
+    public async Task ManifestDeletedBeforeUpload_RestartsFromTheListing()
+    {
+        var ours = _drive.AddManifest(Envelope(Img("r1")));
+        _images.Items = [Img("l1")];
+
+        // Another device removes the manifest we read and leaves its own in place, once.
+        var replaced = false;
+        _drive.BeforeUpload = () =>
+        {
+            if (replaced) return;
+            replaced = true;
+            _drive.Files.Remove(ours);
+            _drive.AddManifest(Envelope(Img("r1"), Img("o1")));
+        };
+
+        await _sync.SyncNowAsync();
+
+        Assert.Equal(SyncStatus.Synced, _sync.Status);
+        Assert.Equal(["l1", "o1", "r1"], RemoteIds(Assert.Single(_drive.Manifests)));
+        Assert.Equal(["l1", "o1", "r1"], Ids(_images.Items));
+    }
+
+    [Fact]
     public async Task VersionConflictEveryAttempt_GivesUpWithError()
     {
         var file = _drive.AddManifest(Envelope());
