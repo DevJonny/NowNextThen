@@ -1,0 +1,298 @@
+@page "/zones/history"
+
+<PageTitle>Feelings history - NowNextThen</PageTitle>
+
+<div class="flex flex-col min-h-screen">
+    <header class="w-full max-w-3xl mx-auto px-4 sm:px-6 mb-6">
+        <div class="flex items-center gap-4">
+            <a href="zones" class="zones-icon-button" aria-label="Go back">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+            </a>
+            <h1 class="text-2xl sm:text-3xl font-bold text-calm-text">Feelings history</h1>
+        </div>
+    </header>
+
+    <main class="w-full max-w-3xl mx-auto px-4 sm:px-6 pb-8 flex-1">
+        @if (!IsLoaded)
+        {
+            <p class="text-calm-text-light text-center">Loading…</p>
+        }
+        else if (Days.Count == 0)
+        {
+            <div class="history-empty" data-testid="history-empty">
+                <p class="text-xl font-semibold text-calm-text mb-2">No feelings yet</p>
+                <p class="text-calm-text-light">Each time a feeling is chosen it will appear here.</p>
+            </div>
+        }
+        else
+        {
+            <section class="history-summary" aria-label="Last 7 days">
+                <h2 class="history-heading">Last 7 days</h2>
+                <div class="history-summary-grid">
+                    @foreach (var zone in ZonesData.Zones)
+                    {
+                        <div class="history-summary-tile" data-zone="@zone.Slug"
+                             style="background-color: @zone.ColorLight; border-color: @zone.ColorDark;">
+                            <span class="history-summary-count">@ZoneCounts[zone.Zone]</span>
+                            <span class="history-summary-name" style="color: @zone.ColorDark;">@zone.Name</span>
+                        </div>
+                    }
+                </div>
+            </section>
+
+            @foreach (var day in Days)
+            {
+                <section class="history-day">
+                    <h2 class="history-heading">@day.Label</h2>
+                    <ul class="history-list">
+                        @foreach (var item in day.Items)
+                        {
+                            var zone = ZonesData.Get(item.Feeling.Zone);
+                            <li class="history-row" data-testid="history-entry">
+                                <span class="history-row-face"><FeelingFace Feeling="item.Feeling" /></span>
+                                <span class="history-row-name">@item.Feeling.Name</span>
+                                <span class="history-row-zone" style="background-color: @zone.ColorLight; color: @zone.ColorDark;">@zone.Name</span>
+                                <span class="history-row-time">@item.LocalTime.ToString("HH:mm")</span>
+                            </li>
+                        }
+                    </ul>
+                </section>
+            }
+
+            <div class="history-clear-container">
+                <button type="button" class="history-clear-button" @onclick="() => ShowClearConfirmation = true">
+                    Clear history
+                </button>
+            </div>
+        }
+    </main>
+
+    @if (ShowClearConfirmation)
+    {
+        <div class="modal-overlay" @onclick="() => ShowClearConfirmation = false">
+            <div class="modal-content" @onclick:stopPropagation="true">
+                <h3 class="modal-title">Clear feelings history?</h3>
+                <p class="modal-message">This removes every saved feeling from this device. It can't be undone.</p>
+                <div class="modal-buttons">
+                    <button type="button" @onclick="() => ShowClearConfirmation = false" class="modal-cancel-button">Cancel</button>
+                    <button type="button" @onclick="ConfirmClearAsync" class="modal-confirm-button">Clear</button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    .zones-icon-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 3rem;
+        height: 3rem;
+        flex-shrink: 0;
+        border-radius: 0.75rem;
+        background-color: white;
+        color: #5B9A9A;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        transition: background-color 0.2s ease;
+    }
+
+    .zones-icon-button:hover {
+        background-color: #F0EDE8;
+    }
+
+    .history-empty {
+        text-align: center;
+        padding: 3rem 1rem;
+        background-color: white;
+        border-radius: 0.75rem;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+
+    .history-heading {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #606F7B;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.5rem;
+    }
+
+    .history-summary {
+        margin-bottom: 1.5rem;
+    }
+
+    .history-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.5rem;
+    }
+
+    .history-summary-tile {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 0.75rem 0.25rem;
+        border: 2px solid;
+        border-radius: 0.75rem;
+    }
+
+    .history-summary-count {
+        font-size: 1.875rem;
+        font-weight: 800;
+        color: #3D4852;
+        line-height: 1.1;
+    }
+
+    .history-summary-name {
+        font-size: 1rem;
+        font-weight: 700;
+    }
+
+    .history-day {
+        margin-bottom: 1.5rem;
+    }
+
+    .history-list {
+        background-color: white;
+        border-radius: 0.75rem;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        overflow: hidden;
+    }
+
+    .history-row {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.625rem 1rem;
+        min-height: 3.5rem;
+    }
+
+    .history-row + .history-row {
+        border-top: 1px solid #E2DFD8;
+    }
+
+    .history-row-face {
+        width: 2.75rem;
+        height: 2.75rem;
+        flex-shrink: 0;
+    }
+
+    .history-row-name {
+        flex: 1;
+        min-width: 0;
+        font-size: 1.125rem;
+        font-weight: 700;
+        color: #3D4852;
+    }
+
+    .history-row-zone {
+        padding: 0.125rem 0.625rem;
+        border-radius: 999px;
+        font-size: 0.875rem;
+        font-weight: 700;
+    }
+
+    .history-row-time {
+        font-size: 1rem;
+        color: #606F7B;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .history-clear-container {
+        display: flex;
+        justify-content: center;
+        padding: 0.5rem 0 1rem;
+    }
+
+    .history-clear-button {
+        padding: 0.625rem 1.25rem;
+        min-height: 3rem;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        background-color: transparent;
+        color: #606F7B;
+        border: 1px solid #E2DFD8;
+        border-radius: 0.75rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .history-clear-button:hover {
+        background-color: #F0EDE8;
+        border-color: #D4A06A;
+        color: #C08B55;
+    }
+
+    .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background-color: rgba(61, 72, 82, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+        z-index: 50;
+    }
+
+    .modal-content {
+        background-color: white;
+        border-radius: 1rem;
+        padding: 1.5rem;
+        max-width: 400px;
+        width: 100%;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    }
+
+    .modal-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #3D4852;
+        margin-bottom: 0.75rem;
+    }
+
+    .modal-message {
+        font-size: 1rem;
+        color: #606F7B;
+        margin-bottom: 1.5rem;
+    }
+
+    .modal-buttons {
+        display: flex;
+        gap: 1rem;
+    }
+
+    .modal-cancel-button,
+    .modal-confirm-button {
+        flex: 1;
+        padding: 0.875rem 1rem;
+        min-height: 3rem;
+        font-size: 1rem;
+        font-weight: 600;
+        border: none;
+        border-radius: 0.75rem;
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+    }
+
+    .modal-cancel-button {
+        background-color: #F0EDE8;
+        color: #3D4852;
+    }
+
+    .modal-cancel-button:hover {
+        background-color: #E2DFD8;
+    }
+
+    .modal-confirm-button {
+        background-color: #D4A06A;
+        color: white;
+    }
+
+    .modal-confirm-button:hover {
+        background-color: #C08B55;
+    }
+</style>

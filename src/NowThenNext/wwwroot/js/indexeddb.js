@@ -2,8 +2,8 @@
 // Replaces localStorage with IndexedDB for larger storage capacity
 (function () {
     const DB_NAME = 'NowThenNextDB';
-    const DB_VERSION = 1;
-    const STORES = ['images', 'phonics-progress', 'learning-cards'];
+    const DB_VERSION = 2;
+    const STORES = ['images', 'phonics-progress', 'learning-cards', 'feelings-log'];
     const DATA_KEY = 'data';
 
     // Map from old localStorage keys to IndexedDB store names

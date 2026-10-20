@@ -99,7 +99,7 @@ public class HomePageTests
 
             // Assert - verify that buttons are grouped with group containers
             var menuGroups = page.Locator(".menu-group");
-            await Assertions.Expect(menuGroups).ToHaveCountAsync(4, new LocatorAssertionsToHaveCountOptions { Timeout = 10000 });
+            await Assertions.Expect(menuGroups).ToHaveCountAsync(5, new LocatorAssertionsToHaveCountOptions { Timeout = 10000 });
 
             // Verify first 3 groups have exactly 2 buttons each
             for (int i = 0; i < 3; i++)
@@ -111,6 +111,10 @@ public class HomePageTests
             // Verify 4th group (Learning) has exactly 2 buttons (Phonics + Learning Cards)
             var learningButtons = menuGroups.Nth(3).Locator(".menu-button");
             await Assertions.Expect(learningButtons).ToHaveCountAsync(2);
+
+            // 5th group (Feelings) has a single Zones of Regulation button
+            var feelingsButtons = menuGroups.Nth(4).Locator(".menu-button");
+            await Assertions.Expect(feelingsButtons).ToHaveCountAsync(1);
         }
         finally
         {

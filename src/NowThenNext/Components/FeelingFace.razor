@@ -1,0 +1,196 @@
+@* A simple face for one feeling, drawn in its zone's colour. 100×100 viewBox. *@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" class="@CssClass"
+     role="img" aria-label="@Feeling.Name" data-feeling="@Feeling.Id">
+    <circle cx="50" cy="50" r="44" fill="@ZoneColors.Color" stroke="@ZoneColors.ColorDark" stroke-width="2.5" />
+
+    <g fill="none" stroke="@Ink" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+        @switch (Feeling.Expression)
+        {
+            case FaceExpression.Happy:
+                @OpenEyes
+                @Blush
+                <path d="M33 60 Q50 64 67 60 Q64 78 50 78 Q36 78 33 60 Z" fill="@Ink" stroke="none" />
+                break;
+
+            case FaceExpression.Calm:
+                <path d="M30 46 Q36 51 42 46" />
+                <path d="M58 46 Q64 51 70 46" />
+                @Blush
+                <path d="M39 63 Q50 70 61 63" />
+                break;
+
+            case FaceExpression.Proud:
+                <path d="M30 47 Q36 40 42 47" />
+                <path d="M58 47 Q64 40 70 47" />
+                @Blush
+                <path d="M32 59 Q50 77 68 59" />
+                break;
+
+            case FaceExpression.Focused:
+                <path d="M29 35 L43 37" />
+                <path d="M57 37 L71 35" />
+                @OpenEyes
+                <path d="M40 65 Q50 69 60 65" />
+                <ellipse cx="58" cy="68.5" rx="3" ry="3.5" fill="@Tongue" stroke="none" />
+                break;
+
+            case FaceExpression.Confused:
+                <path d="M29 34 Q36 28 43 33" />
+                <path d="M57 38 L71 36" />
+                @OpenEyes
+                <path d="M38 68 Q44 63 50 68 Q56 73 62 68" />
+                <g fill="@ZoneColors.ColorDark" stroke="none" font-family="Nunito, sans-serif" font-weight="800">
+                    <text x="76" y="28" font-size="18">?</text>
+                </g>
+                break;
+
+            case FaceExpression.Frustrated:
+                <path d="M29 34 L43 39" />
+                <path d="M71 34 L57 39" />
+                @OpenEyes
+                @GrittedTeeth(38, 24)
+                break;
+
+            case FaceExpression.Worried:
+                <path d="M29 38 L42 33" />
+                <path d="M71 38 L58 33" />
+                @OpenEyes
+                <path d="M40 69 Q50 63 60 69" />
+                @SweatDrop(80, 30)
+                break;
+
+            case FaceExpression.Excited:
+                <path d="M29 33 Q36 27 43 33" />
+                <path d="M57 33 Q64 27 71 33" />
+                @OpenEyes
+                @Blush
+                <path d="M30 58 Q50 62 70 58 Q68 84 50 84 Q32 84 30 58 Z" fill="@Ink" stroke="none" />
+                <path d="M40 78 Q50 70 60 78 Q55 83 50 83 Q45 83 40 78 Z" fill="@Tongue" stroke="none" />
+                break;
+
+            case FaceExpression.Scared:
+                <path d="M28 36 L41 30" />
+                <path d="M72 36 L59 30" />
+                @WideEyes
+                <ellipse cx="50" cy="70" rx="6" ry="8" fill="@Ink" stroke="none" />
+                break;
+
+            case FaceExpression.Furious:
+                <path d="M27 31 L44 41" stroke-width="5" />
+                <path d="M73 31 L56 41" stroke-width="5" />
+                @NarrowEyes
+                @GrittedTeeth(34, 32)
+                <path d="M74 18 Q78 22 82 18 M74 26 Q78 22 82 26" stroke="@ZoneColors.ColorDark" stroke-width="3" />
+                break;
+
+            case FaceExpression.Angry:
+                <path d="M28 33 L43 40" stroke-width="4.5" />
+                <path d="M72 33 L57 40" stroke-width="4.5" />
+                @OpenEyes
+                <path d="M37 72 Q50 61 63 72" />
+                break;
+
+            case FaceExpression.Panicked:
+                <path d="M28 33 L41 27" />
+                <path d="M72 33 L59 27" />
+                @WideEyes
+                <ellipse cx="50" cy="71" rx="9" ry="11" fill="@Ink" stroke="none" />
+                @SweatDrop(20, 34)
+                @SweatDrop(80, 34)
+                break;
+
+            case FaceExpression.Sick:
+                @HeavyEyes
+                <ellipse cx="48" cy="70" rx="4" ry="3" fill="@Ink" stroke="none" />
+                <g transform="rotate(20 52 70)">
+                    <rect x="51" y="67" width="26" height="6" rx="3" fill="#FFFFFF" stroke="@Ink" stroke-width="1.5" />
+                    <circle cx="74" cy="70" r="2" fill="#D98480" stroke="none" />
+                </g>
+                break;
+
+            case FaceExpression.Bored:
+                @HeavyEyes
+                <path d="M41 68 H59" />
+                break;
+
+            case FaceExpression.Tired:
+                <path d="M30 45 Q36 50 42 45" />
+                <path d="M58 45 Q64 50 70 45" />
+                <ellipse cx="50" cy="70" rx="6" ry="7" fill="@Ink" stroke="none" />
+                <g fill="@ZoneColors.ColorDark" stroke="none" font-family="Nunito, sans-serif" font-weight="800">
+                    <text x="70" y="24" font-size="11">z</text>
+                    <text x="78" y="16" font-size="15">Z</text>
+                </g>
+                break;
+
+            case FaceExpression.Sad:
+                <path d="M29 38 L42 33" />
+                <path d="M71 38 L58 33" />
+                @OpenEyes
+                <path d="M38 72 Q50 61 62 72" />
+                <path d="M34 54 Q30 61 34 64 Q38 61 34 54 Z" fill="#FFFFFF" stroke="@ZoneColors.ColorDark" stroke-width="1" />
+                break;
+        }
+    </g>
+</svg>
+
+@code {
+    [Parameter, EditorRequired]
+    public Feeling Feeling { get; set; } = default!;
+
+    [Parameter]
+    public string CssClass { get; set; } = "w-full h-full";
+
+    private const string Ink = "#3D4852";
+    private const string Tongue = "#E58A90";
+
+    private ZoneInfo ZoneColors => ZonesData.Get(Feeling.Zone);
+
+    private static readonly RenderFragment OpenEyes =
+        @<g stroke="none">
+            <ellipse cx="36" cy="45" rx="4.5" ry="6" fill="@Ink" />
+            <ellipse cx="64" cy="45" rx="4.5" ry="6" fill="@Ink" />
+            <circle cx="37.5" cy="42.5" r="1.6" fill="#FFFFFF" />
+            <circle cx="65.5" cy="42.5" r="1.6" fill="#FFFFFF" />
+        </g>;
+
+    private static readonly RenderFragment WideEyes =
+        @<g>
+            <circle cx="36" cy="45" r="8" fill="#FFFFFF" stroke-width="2" />
+            <circle cx="64" cy="45" r="8" fill="#FFFFFF" stroke-width="2" />
+            <circle cx="36" cy="46" r="3.5" fill="@Ink" stroke="none" />
+            <circle cx="64" cy="46" r="3.5" fill="@Ink" stroke="none" />
+        </g>;
+
+    /// <summary>Half-closed: lower half of each eye under a flat lid.</summary>
+    private static readonly RenderFragment HeavyEyes =
+        @<g>
+            <path d="M31 45 H41 A5 5 0 0 1 31 45 Z" fill="@Ink" stroke="none" />
+            <path d="M59 45 H69 A5 5 0 0 1 59 45 Z" fill="@Ink" stroke="none" />
+            <path d="M29 45 H43" stroke-width="3" />
+            <path d="M57 45 H71" stroke-width="3" />
+        </g>;
+
+    private static readonly RenderFragment NarrowEyes =
+        @<g stroke="none">
+            <path d="M31 45 L41 47 A5 5 0 0 1 31 46 Z" fill="@Ink" />
+            <path d="M69 45 L59 47 A5 5 0 0 0 69 46 Z" fill="@Ink" />
+        </g>;
+
+    private static readonly RenderFragment Blush =
+        @<g stroke="none" fill="#F4A6A0" opacity="0.55">
+            <ellipse cx="25" cy="58" rx="6" ry="3.5" />
+            <ellipse cx="75" cy="58" rx="6" ry="3.5" />
+        </g>;
+
+    private static RenderFragment GrittedTeeth(int x, int width) =>
+        @<g>
+            <rect x="@x" y="63" width="@width" height="11" rx="4" fill="#FFFFFF" stroke-width="2.5" />
+            <path d="M@(x) 68.5 H@(x + width)" stroke-width="1.5" />
+            <path d="M@(x + width / 3) 63 V74 M@(x + 2 * width / 3) 63 V74" stroke-width="1.5" />
+        </g>;
+
+    private static RenderFragment SweatDrop(int x, int y) =>
+        @<path d="M@(x) @(y) Q@(x - 5) @(y + 8) @(x) @(y + 11) Q@(x + 5) @(y + 8) @(x) @(y) Z"
+               fill="#CDE6F5" stroke="#6E9CC0" stroke-width="1" />;
+}

@@ -170,6 +170,28 @@
                     </a>
                 </div>
             </div>
+            <!-- Group 5: Feelings (Zones of Regulation) -->
+            <div class="menu-group">
+                <div class="group-label">Feelings</div>
+                <div class="group-buttons">
+                    <a href="zones" class="menu-button menu-button-wide group">
+                        <div class="menu-icon feelings-icon">
+                            <!-- Four zone colours behind a smiley -->
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">
+                                <rect x="0" y="0" width="12" height="12" fill="#8CC084" />
+                                <rect x="12" y="0" width="12" height="12" fill="#EBC866" />
+                                <rect x="0" y="12" width="12" height="12" fill="#E0918B" />
+                                <rect x="12" y="12" width="12" height="12" fill="#86AFD6" />
+                                <circle cx="12" cy="12" r="7" fill="#FFFFFF" />
+                                <circle cx="9.6" cy="10.6" r="1" fill="#3D4852" />
+                                <circle cx="14.4" cy="10.6" r="1" fill="#3D4852" />
+                                <path d="M9 13.6 Q12 16.4 15 13.6" fill="none" stroke="#3D4852" stroke-width="1.3" stroke-linecap="round" />
+                            </svg>
+                        </div>
+                        <span class="menu-text">How do I feel?</span>
+                    </a>
+                </div>
+            </div>
         </div>
     </nav>
 </div>
@@ -298,6 +320,19 @@
     .menu-icon svg {
         width: 1.5rem;
         height: 1.5rem;
+    }
+
+    .feelings-icon {
+        overflow: hidden;
+    }
+
+    .feelings-icon svg {
+        width: 100%;
+        height: 100%;
+    }
+
+    .menu-button-wide {
+        grid-column: 1 / -1;
     }
 
     .menu-text {

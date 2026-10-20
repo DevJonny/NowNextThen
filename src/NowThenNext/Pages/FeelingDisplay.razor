@@ -1,0 +1,120 @@
+@page "/zones/{ZoneSlug}/{FeelingId}"
+
+<PageTitle>I feel @(Feeling?.Name.ToLowerInvariant()) - NowNextThen</PageTitle>
+
+@if (Zone != null && Feeling != null)
+{
+    <div class="feeling-display" style="background-color: @Zone.ColorLight;">
+        <p class="feeling-display-lead">I feel</p>
+        <div class="feeling-display-face">
+            <FeelingFace Feeling="Feeling" />
+        </div>
+        <h1 class="feeling-display-name">@Feeling.Name</h1>
+        <p class="feeling-display-zone" style="background-color: @Zone.Color; border-color: @Zone.ColorDark;">
+            @Zone.Name zone: @Zone.Tagline
+        </p>
+
+        <div class="feeling-display-actions">
+            <a href="zones" class="feeling-display-button feeling-display-again" style="border-color: @Zone.ColorDark; color: @Zone.ColorDark;">
+                Choose again
+            </a>
+            <a href="./" class="feeling-display-button feeling-display-done" style="background-color: @Zone.ColorDark;">
+                Done
+            </a>
+        </div>
+    </div>
+}
+
+<style>
+    .feeling-display {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        padding: 1.5rem 1rem;
+        overflow-y: auto;
+        z-index: 10;
+    }
+
+    .feeling-display-lead {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #3D4852;
+    }
+
+    .feeling-display-face {
+        width: min(60vmin, 22rem);
+        aspect-ratio: 1;
+        animation: feeling-breathe 3s ease-in-out infinite;
+    }
+
+    .feeling-display-name {
+        font-size: 3rem;
+        font-weight: 800;
+        line-height: 1.1;
+        color: #3D4852;
+    }
+
+    .feeling-display-zone {
+        padding: 0.375rem 1.25rem;
+        border: 2px solid;
+        border-radius: 999px;
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #3D4852;
+    }
+
+    .feeling-display-actions {
+        display: flex;
+        gap: 1rem;
+        margin-top: 1.5rem;
+        width: 100%;
+        max-width: 28rem;
+    }
+
+    .feeling-display-button {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 3.5rem;
+        border-radius: 0.75rem;
+        font-size: 1.25rem;
+        font-weight: 700;
+        text-decoration: none;
+        transition: opacity 0.2s ease;
+    }
+
+    .feeling-display-button:hover {
+        opacity: 0.9;
+    }
+
+    .feeling-display-again {
+        background-color: white;
+        border: 3px solid;
+    }
+
+    .feeling-display-done {
+        color: white;
+    }
+
+    @@keyframes feeling-breathe {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.04); }
+    }
+
+    @@media (prefers-reduced-motion: reduce) {
+        .feeling-display-face {
+            animation: none;
+        }
+    }
+
+    @@media (min-width: 768px) {
+        .feeling-display-name {
+            font-size: 4rem;
+        }
+    }
+</style>

@@ -1,0 +1,129 @@
+@page "/zones"
+
+<PageTitle>How do I feel? - NowNextThen</PageTitle>
+
+<div class="flex flex-col min-h-screen">
+    <header class="w-full max-w-4xl mx-auto px-4 sm:px-6 mb-6">
+        <div class="flex items-center justify-between gap-4">
+            <div class="flex items-center gap-4">
+                <a href="./" class="zones-icon-button" aria-label="Go back">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+                    </svg>
+                </a>
+                <h1 class="text-2xl sm:text-3xl font-bold text-calm-text">How do I feel?</h1>
+            </div>
+            <a href="zones/history" class="zones-icon-button" aria-label="Feelings history" title="Feelings history">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="9" />
+                    <path stroke-linecap="round" d="M12 7v5l3 2" />
+                </svg>
+            </a>
+        </div>
+    </header>
+
+    <main class="w-full max-w-4xl mx-auto px-4 sm:px-6 pb-8 flex-1">
+        <p class="text-lg text-calm-text-light mb-4 text-center">Which zone are you in?</p>
+        <div class="zone-grid">
+            @foreach (var zone in ZonesData.Zones)
+            {
+                <a href="zones/@zone.Slug" class="zone-tile" data-zone="@zone.Slug"
+                   style="background-color: @zone.ColorLight; border-color: @zone.ColorDark;">
+                    <div class="zone-tile-face">
+                        <FeelingFace Feeling="zone.Icon" />
+                    </div>
+                    <span class="zone-tile-name" style="color: @zone.ColorDark;">@zone.Name</span>
+                    <span class="zone-tile-tagline">@zone.Tagline</span>
+                </a>
+            }
+        </div>
+    </main>
+</div>
+
+<style>
+    .zones-icon-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 3rem;
+        height: 3rem;
+        flex-shrink: 0;
+        border-radius: 0.75rem;
+        background-color: white;
+        color: #5B9A9A;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        transition: background-color 0.2s ease;
+    }
+
+    .zones-icon-button:hover {
+        background-color: #F0EDE8;
+    }
+
+    .zone-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+    }
+
+    .zone-tile {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 1.25rem 0.75rem;
+        border: 3px solid;
+        border-radius: 1rem;
+        text-decoration: none;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .zone-tile:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+    }
+
+    .zone-tile:active {
+        transform: translateY(0);
+    }
+
+    .zone-tile-face {
+        width: min(8rem, 30vw);
+        aspect-ratio: 1;
+        margin-bottom: 0.5rem;
+    }
+
+    .zone-tile-name {
+        font-size: 1.75rem;
+        font-weight: 800;
+        line-height: 1.1;
+    }
+
+    .zone-tile-tagline {
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: #3D4852;
+    }
+
+    @@media (min-width: 768px) {
+        .zone-grid {
+            gap: 1.5rem;
+        }
+
+        .zone-tile {
+            padding: 1.75rem 1rem;
+        }
+
+        .zone-tile-face {
+            width: 10rem;
+        }
+
+        .zone-tile-name {
+            font-size: 2.25rem;
+        }
+
+        .zone-tile-tagline {
+            font-size: 1.375rem;
+        }
+    }
+</style>

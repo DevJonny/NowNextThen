@@ -295,6 +295,27 @@ public class LocalStorageImageService : IImageStorageService
             Console.Error.WriteLine($"Failed to read learning cards for storage breakdown: {ex.Message}");
         }
 
+        // Calculate size for the feelings history
+        try
+        {
+            var feelingsJson = await _jsRuntime.InvokeAsync<string?>("indexedDb.getItem", FeelingsLogService.StoreName);
+            if (!string.IsNullOrEmpty(feelingsJson))
+            {
+                var sizeBytes = (long)Encoding.UTF8.GetByteCount(feelingsJson);
+                items.Add(new StorageItemInfo(
+                    Id: FeelingsLogService.StoreName,
+                    Label: "Feelings History",
+                    Category: "System",
+                    SizeBytes: sizeBytes,
+                    ThumbnailData: null
+                ));
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Failed to read feelings history for storage breakdown: {ex.Message}");
+        }
+
         // Sort by size descending
         items.Sort((a, b) => b.SizeBytes.CompareTo(a.SizeBytes));
 
