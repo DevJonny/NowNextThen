@@ -3,9 +3,9 @@
 <PageTitle>Feelings history - NowNextThen</PageTitle>
 
 <div class="flex flex-col min-h-screen">
-    <header class="w-full max-w-3xl mx-auto px-4 sm:px-6 mb-6">
+    <header inert="@ShowClearConfirmation" class="w-full max-w-3xl mx-auto px-4 sm:px-6 mb-6">
         <div class="flex items-center gap-4">
-            <a href="zones" class="zones-icon-button" aria-label="Go back">
+            <a href="zones" @ref="backLink" class="zones-icon-button" aria-label="Go back">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
                 </svg>
@@ -14,7 +14,7 @@
         </div>
     </header>
 
-    <main class="w-full max-w-3xl mx-auto px-4 sm:px-6 pb-8 flex-1">
+    <main inert="@ShowClearConfirmation" class="w-full max-w-3xl mx-auto px-4 sm:px-6 pb-8 flex-1">
         @if (!IsLoaded)
         {
             <p class="text-calm-text-light text-center">Loading…</p>
@@ -62,7 +62,7 @@
             }
 
             <div class="history-clear-container">
-                <button type="button" class="history-clear-button" @onclick="() => ShowClearConfirmation = true">
+                <button type="button" @ref="clearButton" class="history-clear-button" @onclick="OpenClearConfirmation">
                     Clear history
                 </button>
             </div>
@@ -71,12 +71,12 @@
 
     @if (ShowClearConfirmation)
     {
-        <div class="modal-overlay" @onclick="() => ShowClearConfirmation = false">
-            <div class="modal-content" @onclick:stopPropagation="true">
-                <h3 class="modal-title">Clear feelings history?</h3>
-                <p class="modal-message">This removes every saved feeling from this device. It can't be undone.</p>
+        <div class="modal-overlay" @onclick="CancelClear" @onkeydown="OnDialogKeyDown">
+            <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="clear-history-title" aria-describedby="clear-history-message" @onclick:stopPropagation="true">
+                <h3 id="clear-history-title" class="modal-title">Clear feelings history?</h3>
+                <p id="clear-history-message" class="modal-message">This removes every saved feeling from this device. It can't be undone.</p>
                 <div class="modal-buttons">
-                    <button type="button" @onclick="() => ShowClearConfirmation = false" class="modal-cancel-button">Cancel</button>
+                    <button type="button" @ref="cancelButton" @onclick="CancelClear" class="modal-cancel-button">Cancel</button>
                     <button type="button" @onclick="ConfirmClearAsync" class="modal-confirm-button">Clear</button>
                 </div>
             </div>

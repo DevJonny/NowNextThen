@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
 using NowThenNext.Models;
 using NowThenNext.Services;
 
@@ -16,6 +17,12 @@ public partial class FeelingsHistoryPage
     private Dictionary<Zone, int> ZoneCounts = [];
     private bool IsLoaded;
     private bool ShowClearConfirmation;
+    private bool focusCancel;
+    private bool restoreFocus;
+    private bool clearCompleted;
+    private ElementReference backLink;
+    private ElementReference clearButton;
+    private ElementReference cancelButton;
 
     protected override async Task OnInitializedAsync()
     {
@@ -33,10 +40,47 @@ public partial class FeelingsHistoryPage
         IsLoaded = true;
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (focusCancel)
+        {
+            focusCancel = false;
+            await cancelButton.FocusAsync();
+        }
+        else if (restoreFocus)
+        {
+            restoreFocus = false;
+            await (clearCompleted ? backLink : clearButton).FocusAsync();
+        }
+    }
+
+    private void OpenClearConfirmation()
+    {
+        ShowClearConfirmation = true;
+        focusCancel = true;
+    }
+
+    private void CancelClear()
+    {
+        ShowClearConfirmation = false;
+        clearCompleted = false;
+        restoreFocus = true;
+    }
+
+    private void OnDialogKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            CancelClear();
+        }
+    }
+
     private async Task ConfirmClearAsync()
     {
         await FeelingsLog.ClearAsync();
         ShowClearConfirmation = false;
+        clearCompleted = true;
+        restoreFocus = true;
         await LoadAsync();
     }
 }
