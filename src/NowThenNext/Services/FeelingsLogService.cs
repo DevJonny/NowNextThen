@@ -16,17 +16,20 @@ public class FeelingsLogService(IJSRuntime jsRuntime, TimeProvider timeProvider)
 
     public async Task LogAsync(string feelingId)
     {
-        var entries = await GetHistoryAsync();
-        entries.Insert(0, new FeelingLogEntry
+        var json = JsonSerializer.Serialize(new FeelingLogEntry
         {
             FeelingId = feelingId,
             TimestampUtc = timeProvider.GetUtcNow().UtcDateTime
         });
 
-        if (entries.Count > MaxEntries)
-            entries.RemoveRange(MaxEntries, entries.Count - MaxEntries);
-
-        await SaveAsync(entries);
+        try
+        {
+            await jsRuntime.InvokeVoidAsync("indexedDb.prependToList", StoreName, json, MaxEntries);
+        }
+        catch (JSException ex) when (ex.Message.Contains("quota", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new StorageQuotaExceededException("Storage quota exceeded. Please delete some data to free up space.", ex);
+        }
     }
 
     public async Task<List<FeelingLogEntry>> GetHistoryAsync()
@@ -50,18 +53,5 @@ public class FeelingsLogService(IJSRuntime jsRuntime, TimeProvider timeProvider)
     public async Task ClearAsync()
     {
         await jsRuntime.InvokeVoidAsync("indexedDb.removeItem", StoreName);
-    }
-
-    private async Task SaveAsync(List<FeelingLogEntry> entries)
-    {
-        var json = JsonSerializer.Serialize(entries);
-        try
-        {
-            await jsRuntime.InvokeVoidAsync("indexedDb.setItem", StoreName, json);
-        }
-        catch (JSException ex) when (ex.Message.Contains("quota", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new StorageQuotaExceededException("Storage quota exceeded. Please delete some data to free up space.", ex);
-        }
     }
 }

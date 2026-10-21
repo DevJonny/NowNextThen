@@ -175,6 +175,15 @@ internal sealed class FakeIndexedDb : IJSRuntime
             case "indexedDb.setItem":
                 Stores[store] = (string)args[1]!;
                 return ValueTask.FromResult<TValue>(default!);
+            case "indexedDb.prependToList":
+                var list = Stores.TryGetValue(store, out var existing)
+                    ? JsonSerializer.Deserialize<List<JsonElement>>(existing) ?? []
+                    : [];
+                list.Insert(0, JsonSerializer.Deserialize<JsonElement>((string)args[1]!));
+                var max = (int)args[2]!;
+                if (list.Count > max) list.RemoveRange(max, list.Count - max);
+                Stores[store] = JsonSerializer.Serialize(list);
+                return ValueTask.FromResult(default(TValue)!);
             case "indexedDb.removeItem":
                 Stores.Remove(store);
                 return ValueTask.FromResult<TValue>(default!);

@@ -152,6 +152,42 @@
             });
         },
 
+        prependToList: async function (storeName, entryJson, maxEntries) {
+            const database = await ensureDb();
+            return new Promise((resolve, reject) => {
+                const tx = database.transaction(storeName, 'readwrite');
+                const store = tx.objectStore(storeName);
+                const request = store.get(DATA_KEY);
+
+                request.onsuccess = function () {
+                    let list = [];
+                    if (request.result) {
+                        try {
+                            const parsed = JSON.parse(request.result);
+                            if (Array.isArray(parsed)) list = parsed;
+                        } catch (e) {
+                            list = [];
+                        }
+                    }
+                    list.unshift(JSON.parse(entryJson));
+                    if (list.length > maxEntries) list.length = maxEntries;
+                    store.put(JSON.stringify(list), DATA_KEY);
+                };
+
+                tx.oncomplete = function () {
+                    resolve();
+                };
+
+                tx.onerror = function (event) {
+                    reject(new Error('Failed to write to ' + storeName + ': ' + event.target.error));
+                };
+
+                tx.onabort = function (event) {
+                    reject(new Error('Failed to write to ' + storeName + ': ' + (event.target.error || 'Transaction aborted')));
+                };
+            });
+        },
+
         removeItem: async function (storeName) {
             const database = await ensureDb();
             return new Promise((resolve, reject) => {
