@@ -19,8 +19,7 @@ public static class FeelingsHistory
     {
         var today = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, timeZone).Date;
 
-        return ToItems(entries, timeZone)
-            .OrderByDescending(i => i.LocalTime)
+        return ToItems(entries.OrderByDescending(e => e.TimestampUtc), timeZone)
             .GroupBy(i => i.LocalTime.Date)
             .Select(g => new FeelingHistoryDay(DayLabel(g.Key, today), g.ToList()))
             .ToList();
