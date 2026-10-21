@@ -31,7 +31,7 @@ Similar to food choices - upload activity pictures and let the child select from
 Export all images and settings to a JSON file for safekeeping, and restore from backup on any device.
 
 ### Cloud Sync (Google Drive)
-Optionally sign in with Google to keep your images, custom learning cards, and phonics progress in sync across devices. Data is stored in your Drive's hidden **app data folder** (scope `drive.appdata`) — the app can only see its own file, never the rest of your Drive. Changes merge per-item (newest edit wins) with deletions propagating across devices, so two devices can both make changes without clobbering each other. See [Cloud Sync setup](#cloud-sync-setup) to configure the OAuth client.
+Optionally sign in with Google to keep your images, custom learning cards, and phonics progress in sync across devices. Data is stored in your Drive's hidden **app data folder** (scope `drive.appdata`) — the app can only see its own files, never the rest of your Drive. Each image is stored once as its own file, so a sync only transfers images that changed. Changes merge per-item (newest edit wins) with deletions propagating across devices, so two devices can both make changes without clobbering each other. See [Cloud Sync setup](#cloud-sync-setup) to configure the OAuth client.
 
 ### Install as App (PWA)
 Install NowThenNext to your device's home screen for a full-screen, app-like experience. The app works offline after installation and automatically updates when new versions are available.
