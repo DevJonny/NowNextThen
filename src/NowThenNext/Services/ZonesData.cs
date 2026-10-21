@@ -10,7 +10,7 @@ public static class ZonesData
 {
     public static IReadOnlyList<ZoneInfo> Zones { get; } =
     [
-        new(Zone.Green, "green", "happy", "Green", "Good to go!", "#8CC084", "#4A7A44", "#E7F3E4",
+        new(Zone.Green, "green", "happy", "Green", "Good to go!", "#8CC084", "#487642", "#E7F3E4",
         [
             new("happy", "Happy", Zone.Green, FaceExpression.Happy),
             new("calm", "Calm", Zone.Green, FaceExpression.Calm),
