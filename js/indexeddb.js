@@ -2,8 +2,8 @@
 // Replaces localStorage with IndexedDB for larger storage capacity
 (function () {
     const DB_NAME = 'NowThenNextDB';
-    const DB_VERSION = 1;
-    const STORES = ['images', 'phonics-progress', 'learning-cards'];
+    const DB_VERSION = 2;
+    const STORES = ['images', 'phonics-progress', 'learning-cards', 'feelings-log'];
     const DATA_KEY = 'data';
 
     // Map from old localStorage keys to IndexedDB store names
@@ -27,6 +27,24 @@
         return dbPromise;
     }
 
+    const BLOCKED_ID = 'idb-blocked-message';
+
+    function showBlockedMessage() {
+        if (document.getElementById(BLOCKED_ID)) return;
+        const el = document.createElement('div');
+        el.id = BLOCKED_ID;
+        el.setAttribute('role', 'alert');
+        el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:10000;padding:16px 24px;' +
+            'background:#F9F7F3;color:#2D3B3B;border-bottom:4px solid #D4A06A;font-size:18px;text-align:center;';
+        el.textContent = 'NowNextThen needs to update its storage. Please close any other NowNextThen tabs or windows, and this page will continue.';
+        document.body.appendChild(el);
+    }
+
+    function hideBlockedMessage() {
+        const el = document.getElementById(BLOCKED_ID);
+        if (el) el.remove();
+    }
+
     function openDatabase() {
         return new Promise((resolve, reject) => {
             const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -40,8 +58,21 @@
                 }
             };
 
+            request.onblocked = function () {
+                showBlockedMessage();
+            };
+
             request.onsuccess = function (event) {
-                resolve(event.target.result);
+                hideBlockedMessage();
+                const database = event.target.result;
+                database.onversionchange = function () {
+                    database.close();
+                    if (db === database) {
+                        db = null;
+                        dbPromise = null;
+                    }
+                };
+                resolve(database);
             };
 
             request.onerror = function (event) {
@@ -117,6 +148,42 @@
 
                 tx.onerror = function (event) {
                     reject(new Error('Failed to write to ' + storeName + ': ' + event.target.error));
+                };
+            });
+        },
+
+        prependToList: async function (storeName, entryJson, maxEntries) {
+            const database = await ensureDb();
+            return new Promise((resolve, reject) => {
+                const tx = database.transaction(storeName, 'readwrite');
+                const store = tx.objectStore(storeName);
+                const request = store.get(DATA_KEY);
+
+                request.onsuccess = function () {
+                    let list = [];
+                    if (request.result) {
+                        try {
+                            const parsed = JSON.parse(request.result);
+                            if (Array.isArray(parsed)) list = parsed;
+                        } catch (e) {
+                            list = [];
+                        }
+                    }
+                    list.unshift(JSON.parse(entryJson));
+                    if (list.length > maxEntries) list.length = maxEntries;
+                    store.put(JSON.stringify(list), DATA_KEY);
+                };
+
+                tx.oncomplete = function () {
+                    resolve();
+                };
+
+                tx.onerror = function (event) {
+                    reject(new Error('Failed to write to ' + storeName + ': ' + event.target.error));
+                };
+
+                tx.onabort = function (event) {
+                    reject(new Error('Failed to write to ' + storeName + ': ' + (event.target.error || 'Transaction aborted')));
                 };
             });
         },
