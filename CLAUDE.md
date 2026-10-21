@@ -40,7 +40,8 @@ tests/NowThenNext.Tests.E2E/  # E2E tests with Playwright
 4. **Favorites**: Cross-category favorites view
 5. **Backup/Restore**: Export/import data as JSON
 6. **Phonics Flashcards**: UK Letters and Sounds Phases 2-5 with sequential unlocking and progress tracking
-7. **Cloud Sync (Google Drive)**: Optional cross-device sync of images, learning cards, and phonics progress via Drive `appDataFolder`
+7. **Zones of Regulation**: Child picks a zone (Green/Yellow/Red/Blue), then one of its 4 feelings; shown full-screen and logged to a device-only history
+8. **Cloud Sync (Google Drive)**: Optional cross-device sync of images, learning cards, and phonics progress via Drive `appDataFolder`
 
 ## Current Status
 - Branch: `ralph/phonics-flashcards` (phonics feature in progress)
@@ -96,6 +97,10 @@ dotnet build
 | `/phonics` | PhonicsPhases.razor | Phonics phase selection (Phase 2-5) |
 | `/phonics/{phaseId}` | PhonicsSoundList.razor | Sound list within a phase |
 | `/phonics/{phaseId}/card/{graphemeId}` | PhonicsCard.razor | Flashcard display with navigation |
+| `/zones` | ZonesOfRegulation.razor | Pick a zone |
+| `/zones/{zone}` | ZoneFeelings.razor | Pick a feeling in that zone (logs the pick) |
+| `/zones/{zone}/{feelingId}` | FeelingDisplay.razor | Full-screen "I feel …" |
+| `/zones/history` | FeelingsHistoryPage.razor | Picks grouped by day, last-7-days zone counts, clear |
 
 ## Data Model
 
@@ -217,6 +222,12 @@ public class MyTests(BlazorAppFixture fixture)
 - **Progress storage**: `HashSet<string>` of completed card IDs serialized as JSON in IndexedDB store `phonics-progress`
 - **Three sound tile states**: Completed (muted bg + checkmark), Current (phonics-blue border), Locked (grey + lock icon, `<div>` not `<a>`)
 - **Phonics color**: `calm-phonics: #7BA3C4`, `calm-phonics-dark: #6890B0`, `calm-phonics-light: #9BBDD6`
+
+### Zones of Regulation Patterns
+- **Static data**: `ZonesData` (4 zones × 4 feelings, colours, icon feeling). Feeling ids are unique and double as route segments
+- **Faces**: `Components/FeelingFace.razor` draws every `FaceExpression` as inline SVG in the zone colour — no image assets (the reference poster is a paid download, so it isn't copied)
+- **History**: `FeelingsLogService` stores `FeelingLogEntry` list in IndexedDB store `feelings-log` (capped at 1000). Not synced and not in backups. `FeelingsHistory` does the pure day-grouping/counting (unit tested)
+- SVG `<text>` inside a Razor `@switch` is parsed as Razor's `<text>` tag — wrap it in a `<g>`
 
 ### Blazor Same-Route Navigation
 - When navigating between pages with the same route template (e.g., `/phonics/2/card/A` to `/phonics/2/card/B`), Blazor reuses the component instance
