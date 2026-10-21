@@ -1,13 +1,18 @@
-// Google Drive appDataFolder sync file access for NowNextThen.
-// Ported from DiceCalc's googleDrive.ts. Exposes window.driveSync for Blazor interop.
+// Google Drive appDataFolder file access for NowNextThen. Exposes window.driveSync for
+// Blazor interop; SyncService decides what the files mean.
 //
-// The whole app data set is stored as one JSON file (nownextthen-sync.json) inside the
-// app's hidden Drive folder. Expected HTTP failures are surfaced to C# as errors whose
-// message is "DRIVE_ERROR:{status}:{detail}" so SyncService can branch on 401/412.
+// Layout: a small manifest (nownextthen-manifest.json) holding every record with image
+// payloads replaced by content hashes, plus one file per image (nownextthen-blob-<sha256>).
+// Older app versions wrote everything to nownextthen-sync.json, which SyncService migrates.
+//
+// Expected HTTP failures are surfaced to C# as errors whose message is
+// "DRIVE_ERROR:{status}:{detail}" so SyncService can branch on 401/404/412.
 (function () {
-    const FILE_NAME = "nownextthen-sync.json";
     const API = "https://www.googleapis.com/drive/v3";
     const UPLOAD = "https://www.googleapis.com/upload/drive/v3";
+
+    // Multipart uploads are documented up to 5 MB; anything bigger uses a resumable session.
+    const MULTIPART_LIMIT = 4 * 1024 * 1024;
 
     function driveError(status, message) {
         return new Error("DRIVE_ERROR:" + status + ":" + message);
@@ -30,18 +35,30 @@
         return resp;
     }
 
-    // Returns every sync file, oldest first, with its Drive `version`. Two devices syncing for
-    // the first time at once can each create one; SyncService merges them all into the oldest
-    // (so every device picks the same one) and deletes the rest.
-    async function findSyncFiles() {
-        const q = encodeURIComponent("name='" + FILE_NAME + "' and trashed=false");
-        const url = API + "/files?spaces=appDataFolder&q=" + q + "&orderBy=createdTime&fields=files(id,version)";
-        const resp = await authedFetch(url);
-        const data = await resp.json();
-        return (data.files || []).map(f => ({ id: f.id, version: f.version || null }));
+    // Every file in the app folder, oldest first: [{ id, name, version, createdTime }].
+    async function listFiles() {
+        const files = [];
+        let pageToken = null;
+        do {
+            let url = API + "/files?spaces=appDataFolder&q=" + encodeURIComponent("trashed=false")
+                + "&orderBy=createdTime&pageSize=1000"
+                + "&fields=nextPageToken,files(id,name,version,createdTime)";
+            if (pageToken) url += "&pageToken=" + encodeURIComponent(pageToken);
+            const data = await (await authedFetch(url)).json();
+            for (const f of data.files || []) {
+                files.push({ id: f.id, name: f.name, version: f.version || null, createdTime: f.createdTime });
+            }
+            pageToken = data.nextPageToken || null;
+        } while (pageToken);
+        return files;
     }
 
-    async function deleteSyncFile(fileId) {
+    async function downloadFile(fileId) {
+        const resp = await authedFetch(API + "/files/" + fileId + "?alt=media");
+        return await resp.text();
+    }
+
+    async function deleteFile(fileId) {
         try {
             await authedFetch(API + "/files/" + fileId, { method: "DELETE" });
         } catch (e) {
@@ -50,39 +67,53 @@
         }
     }
 
-    async function downloadSyncFile(fileId) {
-        const resp = await authedFetch(API + "/files/" + fileId + "?alt=media");
-        return await resp.text();
-    }
-
-    // Drive v3 has no compare-and-swap on update, so check the file's `version` (which
-    // increments on every change) just before writing. A mismatch means another device
-    // wrote since we downloaded; report 412 so SyncService re-downloads and merges again.
-    // This narrows the race to one round trip rather than closing it; anything lost in
-    // that window is still on the other device and re-uploads on its next sync.
-    async function uploadSyncFile(envelopeJson, existingId, expectedVersion) {
-        if (!existingId) return await uploadResumable(UPLOAD + "/files?uploadType=resumable&fields=id,version",
-            "POST", { name: FILE_NAME, parents: ["appDataFolder"] }, envelopeJson);
-
-        if (expectedVersion) {
+    // Creates the file, or overwrites existingId. Drive v3 has no compare-and-swap on update,
+    // so when expectedVersion is given, check the file's `version` (which increments on every
+    // change) just before writing; a mismatch means another device wrote since we downloaded,
+    // reported as 412 so SyncService re-downloads and merges again. This narrows the race to
+    // one round trip rather than closing it.
+    async function uploadFile(name, content, contentType, existingId, expectedVersion) {
+        if (existingId && expectedVersion) {
             const meta = await authedFetch(API + "/files/" + existingId + "?fields=version");
             const current = (await meta.json()).version;
             if (current !== expectedVersion) {
-                throw driveError(412, "Sync file changed on another device");
+                throw driveError(412, "File changed on another device");
             }
         }
-        return await uploadResumable(UPLOAD + "/files/" + existingId + "?uploadType=resumable&fields=id,version",
-            "PATCH", {}, envelopeJson);
+
+        const metadata = existingId ? {} : { name: name, parents: ["appDataFolder"] };
+        const path = existingId ? "/files/" + existingId : "/files";
+        const method = existingId ? "PATCH" : "POST";
+
+        return content.length < MULTIPART_LIMIT
+            ? await uploadMultipart(UPLOAD + path + "?uploadType=multipart&fields=id,version", method, metadata, content, contentType)
+            : await uploadResumable(UPLOAD + path + "?uploadType=resumable&fields=id,version", method, metadata, content, contentType);
     }
 
-    // Resumable upload: simple/multipart uploads are only documented up to 5 MB, and the
-    // envelope carries every image.
-    async function uploadResumable(sessionUrl, method, metadata, body) {
-        const session = await authedFetch(sessionUrl, {
+    async function uploadMultipart(url, method, metadata, content, contentType) {
+        const boundary = "nownextthen-" + crypto.randomUUID();
+        const body = "--" + boundary + "\r\n"
+            + "Content-Type: application/json; charset=UTF-8\r\n\r\n"
+            + JSON.stringify(metadata) + "\r\n"
+            + "--" + boundary + "\r\n"
+            + "Content-Type: " + contentType + "\r\n\r\n"
+            + content + "\r\n"
+            + "--" + boundary + "--";
+        const resp = await authedFetch(url, {
+            method: method,
+            headers: { "Content-Type": "multipart/related; boundary=" + boundary },
+            body: body
+        });
+        const data = await resp.json();
+        return { id: data.id, version: data.version || null };
+    }
+
+    async function uploadResumable(url, method, metadata, content, contentType) {
+        const session = await authedFetch(url, {
             method: method,
             headers: {
                 "Content-Type": "application/json; charset=UTF-8",
-                "X-Upload-Content-Type": "application/json"
+                "X-Upload-Content-Type": contentType
             },
             body: JSON.stringify(metadata)
         });
@@ -91,17 +122,17 @@
 
         const resp = await authedFetch(location, {
             method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: body
+            headers: { "Content-Type": contentType },
+            body: content
         });
         const data = await resp.json();
         return { id: data.id, version: data.version || null };
     }
 
     window.driveSync = {
-        findSyncFiles: findSyncFiles,
-        downloadSyncFile: downloadSyncFile,
-        uploadSyncFile: uploadSyncFile,
-        deleteSyncFile: deleteSyncFile
+        listFiles: listFiles,
+        downloadFile: downloadFile,
+        uploadFile: uploadFile,
+        deleteFile: deleteFile
     };
 })();
